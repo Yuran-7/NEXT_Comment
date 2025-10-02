@@ -44,7 +44,7 @@ class VersionBuilder {
 
   bool CheckConsistencyForNumLevels();
   Status Apply(const VersionEdit* edit);
-  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtree_p);
+  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtree_p);  // Apply 是 LogAndApply 的组成步骤之一。LogAndApply 在安装新 Version 之前，会用 VersionBuilder::Apply 将传入的 VersionEdit（可多条、可跨 CF）先应用到内存中的构建器。
   Status SaveTo(VersionStorageInfo* vstorage) const;
   Status LoadTableHandlers(
       InternalStats* internal_stats, int max_threads,

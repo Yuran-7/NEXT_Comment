@@ -1922,7 +1922,7 @@ void Version::AddIterators(const ReadOptions& read_options,
     }
   }
 }
-
+// 这个函数是Version类的，不是VersionSet类的
 void Version::AddIteratorsForLevel(const ReadOptions& read_options,
                                    const FileOptions& soptions,
                                    MergeIteratorBuilder* merge_iter_builder,
@@ -1957,7 +1957,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
     } else {
       ValueRange query_valrange = ReadValueRange(query_slice);
       Rect1D query_rect1D(query_valrange.range.min, query_valrange.range.max);
-      hittedFiles = global_rtree_->Search(query_rect1D.min, query_rect1D.max, GlobalRTreeCallback); // 返回值很关键，global_rtree_是新增的VersionSet成员变量
+      hittedFiles = global_rtree_->Search(query_rect1D.min, query_rect1D.max, GlobalRTreeCallback); // 返回值很关键，global_rtree_是新增的VersionSet成员变量，在VersionSet的构造函数中初始化：global_rtree_.Load(global_rtree_loc_);
     }
 
     // iterating through the return vector
@@ -1978,7 +1978,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
     // hitfilenum.erase(std::unique(hitfilenum.begin(),hitfilenum.end()),hitfilenum.end());
     // std::cout << "Found file number: " << static_cast<int>(hitfilenum.size()) << std::endl;
 
-    std::set<std::pair<uint64_t, u_int64_t>> seenBlkHandle;
+    std::set<std::pair<uint64_t, u_int64_t>> seenBlkHandle; // 这个数据结构用于去重
 
     for (std::map<uint64_t, std::vector<BlockHandle>>::iterator mit = filenum_2_blkhandle.begin(); mit != filenum_2_blkhandle.end(); ++mit) {
     // for (int i = 0; i < static_cast<int>(hitfilenum.size()); i++) {
@@ -2000,7 +2000,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
         }
         // read_options.found_sec_blkhandle->emplace_back(std::make_pair(offset_bh, size_bh));
       }
-      seenBlkHandle.clear();
+      seenBlkHandle.clear();  // 内层for循环结束清空一次
       // std::cout << "found_sec_blkhandle size: " << read_options.found_sec_blkhandle->size() << std::endl;
 
      
@@ -2008,14 +2008,14 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
       // get the file location
       // file_level: location.GetLevel()
       // file_position: location.GetPosition()
-      auto hfile_loc = storage_info_.GetFileLocation(hfile_number);
+      auto hfile_loc = storage_info_.GetFileLocation(hfile_number); // 根据文件编号，获取FileLocation结构
       if (hfile_loc.GetLevel() == -1) {
-        read_options.found_sec_blkhandle->clear();
+        read_options.found_sec_blkhandle->clear();  // 清空vector中的所有内容
         continue;
       } 
-      // create the iterator
-      const auto& file = storage_info_.LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];
-      auto table_iter = cfd_->table_cache()->NewIterator(
+      // 它访问的只是“内存里的元数据（来自 MANIFEST 重放/Version 构建时填充），并不意味着对应的 SST 文件已经被“打开”，file类型是FdWithKeyRange
+      const auto& file = storage_info_.LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];  // 根据 hfile_loc 的 Level 和在该 Level 中的位置，找到对应的文件简要信息，并用只读引用绑定到 file
+      auto table_iter = cfd_->table_cache()->NewIterator( // cfd_是ColumnFamilyData类型的指针，是Version的成员变量
           read_options, soptions, cfd_->internal_sec_comparator(),
           *file.file_metadata, /*range_del_agg=*/nullptr,
           mutable_cf_options_.prefix_extractor, nullptr,
@@ -2029,9 +2029,9 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
         merge_iter_builder->AddIterator(table_iter);
       } else {
         merge_iter_builder->AddPointAndTombstoneIterator(table_iter,
-                                                        tombstone_iter);  // 走这里
+                                                        tombstone_iter);  // 走这里，table_iter：遍历 point key 的迭代器，tombstone_iter：遍历 range deletion 的迭代器
         } 
-      read_options.found_sec_blkhandle->clear();  // 创建完一个迭代器就清空，为下一个SST做准备
+      read_options.found_sec_blkhandle->clear();  // 创建完一个迭代器就清空，为下一个SST做准备，read_options已经在生成table_iter时使用到了
     }
   } else {  // else分支的内容没有变动
     if (level == 0) {
@@ -5339,6 +5339,8 @@ void AtomicGroupReadBuffer::Clear() {
   replay_buffer_.clear();
 }
 
+// 创建（构造）：在打开数据库时创建。DB::Open/DBImpl::Open 会构造 VersionSet（传入 dbname、db/options、table cache 等），并随后的 Recover 流程用它加载 MANIFEST
+// 正常运行时，VersionSet在 DB::Open 成功后创建，由DB实例（DBImpl/ColumnFamilySet）持有，整个数据库打开期间常驻内存。VersionSet 是“每个 DB 一个”，跨所有列族共享
 VersionSet::VersionSet(const std::string& dbname,
                        const ImmutableDBOptions* _db_options,
                        const FileOptions& storage_options, Cache* table_cache,
@@ -5375,7 +5377,7 @@ VersionSet::VersionSet(const std::string& dbname,
       db_session_id_(db_session_id) {
         global_rtree_.Load(global_rtree_loc_);
       }
-
+// 析构：在数据库关闭/DBImpl 析构时销毁。~VersionSet 会释放 ColumnFamilySet、清理/回收 obsolete 文件句柄，保存必要状态（例如示例代码中保存 global_rtree_）
 VersionSet::~VersionSet() {
   // we need to delete column_family_set_ because its destructor depends on
   // VersionSet

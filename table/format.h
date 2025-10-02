@@ -79,7 +79,7 @@ class BlockHandle {
   uint64_t offset_; // 块在文件中的起始字节偏移量
   uint64_t size_; // 块的大小（字节数）
 
-  static const BlockHandle kNullBlockHandle;
+  static const BlockHandle kNullBlockHandle;  // 只会在 全局静态区 分配 一份存储
 };
 
 // Value in block-based table file index.
@@ -89,7 +89,7 @@ class BlockHandle {
 // first key of block n+1 (exclusive); h is BlockHandle pointing to block n;
 // x, if present, is the first key of block n (unshortened).
 // This struct represents the "h, [x]" part.
-struct IndexValue {
+struct IndexValue { // 这个不是新增的
   BlockHandle handle;
   // Empty means unknown.
   Slice first_internal_key;

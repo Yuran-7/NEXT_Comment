@@ -1073,7 +1073,7 @@ class VersionBuilder::Rep {
   }
 
     // Apply all of the edits in *edit to the current state.
-  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtee_p) {
+  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtee_p) {  // 只在内存中把一条 VersionEdit 合并进 VersionBuilder（更新各层文件增删、compaction 指针等）
     // std::cout << "apply" << std::endl;
     {
       const Status s = CheckConsistency(base_vstorage_);
@@ -1110,7 +1110,7 @@ class VersionBuilder::Rep {
       // if global rtree is activated
       // remove entry from global rtree for each deleted files
       if(ioptions_->global_sec_index) {
-        if (!ioptions_->global_sec_index_is_spatial){
+        if (!ioptions_->global_sec_index_is_spatial){ // 一维
           // const ValueRange valrange = GetValRangeForTableFile(level, file_number);
           // Rect1D filerect(valrange.range.min, valrange.range.max);
           // global_rtree.Remove(filerect.min, filerect.max, std::make_pair(level, file_number));
@@ -1125,7 +1125,7 @@ class VersionBuilder::Rep {
             global_rtee_p->Remove(tuplerect_num.min, tuplerect_num.max, sec_index_val_num);
             globla_sec_id++;
           }
-        } else {
+        } else {  // 二维
           // // global index @ tuple level
           // const std::vector<std::pair<int, Mbr>> filetuples= GetTupleMbrForTableFile(level, file_number);
           // for (const std::pair<int, Mbr>& tuple : filetuples) {
@@ -1148,7 +1148,7 @@ class VersionBuilder::Rep {
             glosecid++;
           }   
         }
-      }
+      } // if 新增
 
       const Status s = ApplyFileDeletion(level, file_number);
       if (!s.ok()) {

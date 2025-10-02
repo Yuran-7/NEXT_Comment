@@ -1480,7 +1480,7 @@ struct ReadOptions {
   // In case of user_defined timestamp, if enabled, iterate_lower_bound should
   // point to key without timestamp part.
   // Default: nullptr
-  const Slice* iterate_lower_bound;
+  const Slice* iterate_lower_bound; // 指定 迭代器的最小 key 边界。当你调用 Iterator::SeekToFirst() 或者 Iterator::Seek(target) 时，迭代器不会返回小于这个边界的 key
 
   // "iterate_upper_bound" defines the extent up to which the forward iterator
   // can returns entries. Once the bound is reached, Valid() will be false.
@@ -1710,7 +1710,7 @@ struct ReadOptions {
   // Default: false
   bool is_secondary_index_scan=false;
   bool is_secondary_index_spatial=true;
-  std::vector<std::pair<uint64_t, uint64_t>>* found_sec_blkhandle = new std::vector<std::pair<uint64_t, uint64_t>>();
+  std::vector<std::pair<uint64_t, uint64_t>>* found_sec_blkhandle = new std::vector<std::pair<uint64_t, uint64_t>>(); // 每个SST创建完之后就会清空一次，分别是offset和size
 
   ReadOptions();
   ReadOptions(bool cksum, bool cache);

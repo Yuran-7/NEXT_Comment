@@ -11,3 +11,7 @@ testdb
 secondary_index_data_write_num
 secondary_index_read_num
 global_rtree
+bplustree/bplustree_insert
+bplustree/bplustree_query
+bplustree/global_bptree
+rtree/rtree_insert

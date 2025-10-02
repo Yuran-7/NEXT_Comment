@@ -148,9 +148,9 @@ InternalIteratorBase<IndexValue>* OneDRtreeSecIndexReader::NewIterator(
             rep->get_global_seqno(BlockType::kIndex), nullptr, kNullStats, true,
             index_has_first_key(), index_key_includes_seq(),
             index_value_is_full()));
-  } else {
+  } else {  // 进入
     // std::cout << "partition_map_ empty" << std::endl;
-    ReadOptions ro;
+    ReadOptions ro; // 复制一份 ReadOptions 到局部变量 ro
     ro.fill_cache = read_options.fill_cache;
     ro.deadline = read_options.deadline;
     ro.io_timeout = read_options.io_timeout;
@@ -179,16 +179,16 @@ InternalIteratorBase<IndexValue>* OneDRtreeSecIndexReader::NewIterator(
     //         index_value_is_full()));
     // std::cout << "three bools: " << index_has_first_key() << "; " << index_key_includes_seq() << "; " << index_value_is_full() << std::endl;
     std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter(
-        index_block.GetValue()->NewIndexIterator(
+        index_block.GetValue()->NewIndexIterator( // CachableEntry<Block> index_block; GetValue()返回Block*
             internal_comparator()->user_comparator(),
             rep->get_global_seqno(BlockType::kIndex), nullptr, kNullStats, true,
             index_has_first_key(), index_key_includes_seq(),
-            index_value_is_full()));
+            index_value_is_full()));  // 返回 IndexBlockIter*类型，它是InternalIteratorBase<IndexValue>的子类
 
     // std::cout << "rtree_index_reader rtree_height_: " << rtree_height_ << std::endl;
 
-    it = new OneDRtreeSecIndexIterator(
-        table(), ro, *internal_comparator(), std::move(index_iter),
+    it = new OneDRtreeSecIndexIterator( // class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue>，且OneDRtreeSecIndexIterator类有一个成员变量std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter_;
+        table(), ro, *internal_comparator(), std::move(index_iter), // index_iter 赋值给成员变量 index_iter_
         lookup_context ? lookup_context->caller
                        : TableReaderCaller::kUncategorized, rtree_height_); // 构造函数，每个SST一个，里面里把 read_options.found_sec_blkhandle 拷贝到成员 found_sec_handles_，并把 sec_blk_iter_ 设为 begin()
   }

@@ -58,7 +58,7 @@ TBlockIter* BlockBasedTable::NewDataBlockIterator(
                       get_context, lookup_context, for_compaction,
                       /* use_cache */ true, /* wait_for_cache */ true,
                       async_read);
-  } else {
+  } else {  // 进入
     s = RetrieveBlock(
         prefetch_buffer, ro, handle, UncompressionDict::GetEmptyDict(), &block,
         block_type, get_context, lookup_context, for_compaction,
@@ -108,7 +108,7 @@ TBlockIter* BlockBasedTable::NewDataBlockIterator(
     } else if (ro.is_secondary_index_spatial) {
       iter = InitBlockIterator(ro.is_secondary_index_scan, rep_, block.GetValue(), BlockType::kData, iter,
                                         block_contents_pinned, iterator_context);      
-    } else {
+    } else {  // 进入
       iter = InitBlockIterator(ro.is_secondary_index_scan, ro.is_secondary_index_spatial, 
                                 rep_, block.GetValue(), BlockType::kData, iter,
                                 block_contents_pinned, iterator_context);
@@ -134,7 +134,7 @@ TBlockIter* BlockBasedTable::NewDataBlockIterator(
         }
       }
     }
-  } else {
+  } else {  // 进入
     iter->SetCacheHandle(block.GetCacheHandle());
   }
 

@@ -1571,14 +1571,14 @@ void DBIter::SeekForPrev(const Slice& target) {
 }
 
 void DBIter::SeekToFirst() {
-  if (iterate_lower_bound_ != nullptr) {
+  if (iterate_lower_bound_ != nullptr) {  // 不进入
     Seek(*iterate_lower_bound_);
     return;
   }
   PERF_CPU_TIMER_GUARD(iter_seek_cpu_nanos, clock_);
   // Don't use iter_::Seek() if we set a prefix extractor
   // because prefix seek will be used.
-  if (!expect_total_order_inner_iter()) {
+  if (!expect_total_order_inner_iter()) { // 不进入
     max_skip_ = std::numeric_limits<uint64_t>::max();
   }
   status_ = Status::OK();
@@ -1594,7 +1594,7 @@ void DBIter::SeekToFirst() {
 
   {
     PERF_TIMER_GUARD(seek_internal_seek_time);
-    iter_.SeekToFirst();
+    iter_.SeekToFirst();  // IteratorWrapper，可以认为是MergingIterator
   }
 
   RecordTick(statistics_, NUMBER_DB_SEEK);

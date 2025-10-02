@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
     options.sec_comparator = &cmp1;
 
     options.info_log_level = DEBUG_LEVEL;
-    options.statistics = rocksdb::CreateDBStatistics();
+    options.statistics = rocksdb::CreateDBStatistics(); // 启用了statistics
 
     BlockBasedTableOptions block_based_options;
 
@@ -165,6 +165,7 @@ int main(int argc, char* argv[]) {
     rocksdb::RtreeIteratorContext iterator_context; // 定义在util/rtree.h，继承IteratorContext
 
     std::chrono::nanoseconds totalDuration{0};
+    int totalResults = 0;
     for (int i=0; i<querySize;i++) {
         queryFile >> low[0] >> low[1];
 
@@ -176,11 +177,22 @@ int main(int argc, char* argv[]) {
         read_options.is_secondary_index_spatial = false;
         read_options.async_io = true;
         // std::cout << "create newiterator" << std::endl;
-        std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));
+        std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));  // it动态类型是ArenaWrappedDBIter
         // std::cout << "created New iterator" << std::endl;
         int counter = 0;
         for (it->SeekToFirst(); it->Valid(); it->Next()) {
-            double value = deserialize_val(it->value());
+            // 打印第一轮查询(i == 0)的所有key，检查是否大致升序；已知key为4字节int
+            if (i == 0) {
+                const Slice key_slice = it->key();
+                if (key_slice.size() >= sizeof(int)) {
+                    int key_int = *reinterpret_cast<const int*>(key_slice.data());
+                    std::cout << key_int << "\n";
+                } else {
+                    std::cout << "<invalid key size:" << key_slice.size() << ">\n";
+                }
+            }
+
+            double value = deserialize_val(it->value());    // it->value()是返回所有值，deserialize_val将第一个double类型的面积取出来
             // std::cout << value << std::endl;
             counter ++;
         }
@@ -190,9 +202,12 @@ int main(int argc, char* argv[]) {
         // resFile << "Results: \t" << counter << "\t" << totalDuration.count() << "\n";
         std::cout << "Total number of results: " << counter << std::endl;     
         // std::cout << "Query Duration: " << duration.count() << " nanoseconds" << std::endl;   
+        totalResults += counter;
     }
     std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
+    std::cout << "Total number of results: " << totalResults << std::endl;
 
+    sleep(5);
     db->Close();    
 
     delete db;
@@ -218,4 +233,4 @@ g++ -g3 -O0 -std=c++17 \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
  */
 
- /* ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.01 */
+ // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.01

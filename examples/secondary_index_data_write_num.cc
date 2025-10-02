@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total data size: " << (totalKeySize + totalValueSize) / 1024.0 / 1024.0 << " MB" << std::endl;
         std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
 
-        sleep(1);
+        sleep(5);
 
         db->Close();
 
@@ -281,7 +281,7 @@ int main(int argc, char* argv[]) {
 }
 
 /*
-g++ -std=c++17 \
+g++ -g3 -O0 -std=c++17 \
   -faligned-new -DHAVE_ALIGNED_NEW \
   -DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX \
   -DOS_LINUX -fno-builtin-memcmp \
@@ -298,6 +298,6 @@ g++ -std=c++17 \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
  */
 
-/*
-./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m
-*/
+
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_buildings.txt
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m

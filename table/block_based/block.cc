@@ -536,7 +536,7 @@ void DataBlockIter::SeekToFirstImpl() {
     ParseNextSpatialDataKey(&is_shared);
   } else if (is_spatial_) {
     ParseNextSecSpatialDataKey(&is_shared);
-  } else {
+  } else {  // 进入
     ParseNextSecDataKey(&is_shared);
   }
 }
@@ -1282,7 +1282,7 @@ DataBlockIter* Block::NewSecondaryIndexDataIterator1D(const Comparator* raw_ucmp
 
   return ret_iter;
 }
-
+// class IndexBlockIter final : public BlockIter<IndexValue>  class BlockIter : public InternalIteratorBase<TValue>
 IndexBlockIter* Block::NewIndexIterator(
     const Comparator* raw_ucmp, SequenceNumber global_seqno,
     IndexBlockIter* iter, Statistics* /*stats*/, bool total_order_seek,

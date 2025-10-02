@@ -25,20 +25,20 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
                                        bool async_prefetch) {
   // std::cout << "BlockBasedTableIterator SeekToFirst" << std::endl;
   bool is_first_pass = true;
-  if (async_read_in_progress_) {
+  if (async_read_in_progress_) {  // 不进入
     AsyncInitDataBlock(false);
     is_first_pass = false;
   }
 
   is_out_of_bound_ = false;
   is_at_first_key_from_index_ = false;
-  if (target && !CheckPrefixMayMatch(*target, IterDirection::kForward)) {
+  if (target && !CheckPrefixMayMatch(*target, IterDirection::kForward)) { // 不进入
     ResetDataIter();
     return;
   }
 
   bool need_seek_index = true;
-  if (block_iter_points_to_real_block_ && block_iter_.Valid()) {
+  if (block_iter_points_to_real_block_ && block_iter_.Valid()) {  // block_iter_是DataBlockIter类型的
     // Reseek.
     prev_block_offset_ = index_iter_->value().handle.offset();
 
@@ -73,8 +73,8 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
     }
   }
 
-  IndexValue v = index_iter_->value();
-  const bool same_block = block_iter_points_to_real_block_ &&
+  IndexValue v = index_iter_->value();  // offset_=8823310 size_=3897，return block_iter_.value();
+  const bool same_block = block_iter_points_to_real_block_ && // block_iter_points_to_real_block_指示当前 data_iter_ 是不是指向了一个 真实的数据块（data block）
                           v.handle.offset() == prev_block_offset_;
 
   if (!v.first_internal_key.empty() && !same_block &&
@@ -87,7 +87,7 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
     // call CheckDataBlockWithinUpperBound() to check for iterate_upper_bound
     // as that will be done later when the data block is actually read.
     ResetDataIter();
-  } else {
+  } else {  // 进入
     // Need to use the data block.
     if (!same_block) {
       if (read_options_.async_io && async_prefetch) {
@@ -102,7 +102,7 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
           return;
         }
       } else {
-        InitDataBlock();
+        InitDataBlock();  // 初始化block_iter_，用到了index_iter_
       }
     } else {
       // When the user does a reseek, the iterate_upper_bound might have
@@ -116,9 +116,9 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
     if (target) {
       block_iter_.Seek(*target);
     } else {
-      block_iter_.SeekToFirst();
+      block_iter_.SeekToFirst();  // block_iter_.value()有真正的数据
     }
-    FindKeyForward();
+    FindKeyForward(); // 正常情况下不做任何事
   }
 
   CheckOutOfBound();

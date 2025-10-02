@@ -97,7 +97,7 @@ class MinHeapItemComparator {
   const InternalKeyComparator* comparator_;
 };
 
-class MinHeapItemComparatorNoOrder {
+class MinHeapItemComparatorNoOrder {  // 不排序
  public:
   MinHeapItemComparatorNoOrder(const InternalKeyComparator* comparator)
       : comparator_(comparator) {}
@@ -283,12 +283,12 @@ class MergingIterator : public InternalIterator {
     auto start = std::chrono::high_resolution_clock::now();
     ClearHeaps();
     status_ = Status::OK();
-    for (auto& child : children_) {
-      child.iter.SeekToFirst();
-      AddToMinHeapOrCheckStatus(&child);
+    for (auto& child : children_) { // HeapItem，内存一个mem，磁盘有5个
+      child.iter.SeekToFirst(); // child.iter是BlockBasedTableIterator
+      AddToMinHeapOrCheckStatus(&child);  // 存入minHeap_.push(child);（按最小内部键排序）
     }
 
-    for (size_t i = 0; i < range_tombstone_iters_.size(); ++i) {
+    for (size_t i = 0; i < range_tombstone_iters_.size(); ++i) {  // 跳过
       if (range_tombstone_iters_[i]) {
         range_tombstone_iters_[i]->SeekToFirst();
         if (range_tombstone_iters_[i]->Valid()) {
@@ -299,7 +299,7 @@ class MergingIterator : public InternalIterator {
     }
     FindNextVisibleKey();
     direction_ = kForward;
-    current_ = CurrentForward();
+    current_ = CurrentForward();  // return minHeap_.top()->iter，应该就是OneDRtreeSecIndexIterator
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
     // std::cout << "min heap size after: " << minHeap_.size() << std::endl;
@@ -1085,7 +1085,7 @@ bool MergingIterator::SkipPrevDeleted() {
 void MergingIterator::AddToMinHeapOrCheckStatus(HeapItem* child) {
   if (child->iter.Valid()) {
     assert(child->iter.status().ok());
-    minHeap_.push(child);
+    minHeap_.push(child); // MergerMinIterHeap
   } else {
     considerStatus(child->iter.status());
   }
@@ -1271,7 +1271,7 @@ inline void MergingIterator::FindPrevVisibleKey() {
 
 
 // Merging Iterator No Order (comparator return 1) for secondary index search
-class MergingIteratorNoOrder : public InternalIterator {
+class MergingIteratorNoOrder : public InternalIterator {  // 这个类是新增的
  public:
   MergingIteratorNoOrder(const InternalKeyComparator* comparator,
                   InternalIterator** children, int n, bool is_arena_mode,
@@ -2435,7 +2435,7 @@ MergeIteratorBuilder::MergeIteratorBuilder(
   auto mem = arena->AllocateAligned(sizeof(MergingIterator));
   // auto mem = arena->AllocateAligned(sizeof(MergingIteratorNoOrder));
   merge_iter =
-      new (mem) MergingIterator(comparator, nullptr, 0, true, prefix_seek_mode);
+      new (mem) MergingIterator(comparator, nullptr, 0, true, prefix_seek_mode);  // 下面的被注释掉了，既然注释掉了就只能使用有序的MergingIterator
   // merge_iter = 
   //     new (mem) MergingIteratorNoOrder(comparator, nullptr, 0, true, prefix_seek_mode);
 }

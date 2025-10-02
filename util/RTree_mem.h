@@ -408,14 +408,14 @@ public:
 #if defined(_WIN32) && defined(__STDC_WANT_SECURE_LIB__)
     return fopen_s(&m_file, a_fileName, mode) == 0;
 #else
-    m_file = fopen(a_fileName, mode);
+    m_file = fopen(a_fileName, mode); // 如果文件不存在，fopen 返回 NULL，m_file = nullptr，函数返回 false
     return m_file != nullptr;
 #endif
   }
 
   bool OpenRead(const char* a_fileName)
   {
-    return this->Open(a_fileName, "rb");
+    return this->Open(a_fileName, "rb");  // "rb" 表示：以只读、二进制模式打开文件
   }
 
   bool OpenWrite(const char* a_fileName)
@@ -545,7 +545,7 @@ void RTREE_QUAL::Remove(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMD
 }
 
 
-RTREE_TEMPLATE
+RTREE_TEMPLATE  // hittedFiles = global_rtree_->Search(query_rect1D.min, query_rect1D.max, GlobalRTreeCallback)
 std::vector<DATATYPE> RTREE_QUAL::Search(const ELEMTYPE a_min[NUMDIMS], const ELEMTYPE a_max[NUMDIMS], std::function<bool (const DATATYPE&)> callback) const
 {
 #ifdef _DEBUG
@@ -608,7 +608,7 @@ bool RTREE_QUAL::Load(const char* a_fileName)
   RemoveAll(); // Clear existing tree，先清空原树，内存中的
 
   RTFileStream stream;
-  if(!stream.OpenRead(a_fileName))
+  if(!stream.OpenRead(a_fileName))  // 如果文件不存在，不会帮你创建，返回 false
   {
     return false;
   }
@@ -1662,7 +1662,7 @@ bool RTREE_QUAL::Search(Node* a_node, Rect* a_rect, int& a_foundCount, std::func
   return true; // Continue searching
 }
 
-RTREE_TEMPLATE
+RTREE_TEMPLATE  // Search(m_root, &rect, return_res, callback);
 bool RTREE_QUAL::Search(Node* a_node, Rect* a_rect, std::vector<DATATYPE>& a_return_res, std::function<bool (const DATATYPE&)> callback) const
 {
   ASSERT(a_node);
@@ -1695,7 +1695,7 @@ bool RTREE_QUAL::Search(Node* a_node, Rect* a_rect, std::vector<DATATYPE>& a_ret
         // std::cout << "found data" << std::endl;
         a_return_res.emplace_back(indexdata);
 
-          if(callback && !callback(indexdata))
+          if(callback && !callback(indexdata))  // 目前是不会进入这个if
           {
             return false; // Don't continue searching
           }

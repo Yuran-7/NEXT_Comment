@@ -103,18 +103,18 @@ void OneDRtreeSecIndexIterator::SeekImpl(const Slice* target) {
     return;
   }
 
-  InitPartitionedSecIndexBlock(); // 初始化分区二级索引块
+  InitPartitionedSecIndexBlock(); // 初始化block_iter_
 
   // ============================================================================================================================================================
 
 
-  block_iter_.SeekToFirst();  // OneDRtreeSecIndexIterator的私有成员变量，不是用于遍历SST文件中普通数据块的迭代器，而是用于遍历二级索引块的迭代器。
+  block_iter_.SeekToFirst();
   // std::cout << "block_iter_ valuerange: " << ReadValueRange(block_iter_.key()) << std::endl;
   while (block_iter_.Valid() && !IntersectValRange(ReadValueRange(block_iter_.key()), query_valrange_)) { // 过滤不满足查询条件的条目
-    block_iter_.Next();
+    block_iter_.Next(); // 退出循环时，block_iter_停在
   }
   
-  FindKeyForwardSec();  // 查找下一个有效的键
+  FindKeyForwardSec();  // 正常情况下不做任何事
 
   // std::cout << "First index entry value: " << ReadQueryMbr(block_iter_.key()) << std::endl;
 
@@ -202,7 +202,7 @@ void OneDRtreeSecIndexIterator::InitPartitionedIndexBlock(IndexBlockIter* block_
         is_for_compaction, /*no_sequential_checking=*/false,
         read_options_.rate_limiter_priority);
     Status s;
-    table_->NewDataBlockIterator<IndexBlockIter>(
+    table_->NewDataBlockIterator<IndexBlockIter>( // const BlockBasedTable* table_以及IndexBlockIter block_iter_是OneDRtreeSecIndexIterator的成员变量
         read_options_, partitioned_index_handle, &block_iter_,
         BlockType::kIndex,
         /*get_context=*/nullptr, &lookup_context_,
@@ -217,7 +217,7 @@ void OneDRtreeSecIndexIterator::InitPartitionedIndexBlock(IndexBlockIter* block_
 }
 
 void OneDRtreeSecIndexIterator::InitPartitionedSecIndexBlock() {
-  uint64_t pi_handle_offset = sec_blk_iter_->first;
+  uint64_t pi_handle_offset = sec_blk_iter_->first; // sec_blk_iter_属于vector的迭代器类型
   uint64_t pi_handle_size = sec_blk_iter_->second;
   BlockHandle partitioned_index_handle(pi_handle_offset, pi_handle_size);
   
@@ -241,7 +241,7 @@ void OneDRtreeSecIndexIterator::InitPartitionedSecIndexBlock() {
         is_for_compaction, /*no_sequential_checking=*/false,
         read_options_.rate_limiter_priority);
     Status s;
-    table_->NewDataBlockIterator<IndexBlockIter>(
+    table_->NewDataBlockIterator<IndexBlockIter>( // IndexBlockIter block_iter_和BlockBasedTable* table_都是OneDRtreeSecIndexIterator的成员变量
         read_options_, partitioned_index_handle, &block_iter_,
         BlockType::kIndex,
         /*get_context=*/nullptr, &lookup_context_,
@@ -291,7 +291,7 @@ void OneDRtreeSecIndexIterator::InitRtreeIntermediateIndexBlock(IndexBlockIter* 
         BlockType::kIndex,
         /*get_context=*/nullptr, &lookup_context_,
         block_prefetcher_.prefetch_buffer(),
-        /*for_compaction=*/is_for_compaction, /*async_read=*/false, s);
+        /*for_compaction=*/is_for_compaction, /*async_read=*/false, s); // 主要是为了得到block_iter
 }
 
 void OneDRtreeSecIndexIterator::AddChildToStack() {

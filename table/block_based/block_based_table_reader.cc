@@ -1579,11 +1579,11 @@ InternalIteratorBase<IndexValue>* BlockBasedTable::NewIndexIterator(
     assert(rep_->sec_index_reader != nullptr);
     return rep_->sec_index_reader->NewIterator(read_options, disable_prefix_seek,
                                               input_iter, get_context,
-                                              lookup_context);
+                                              lookup_context);  // return OneDRtreeSecIndexIterator
   } else {
     return rep_->index_reader->NewIterator(read_options, disable_prefix_seek,
                                           input_iter, get_context,
-                                          lookup_context);
+                                          lookup_context);  // 正常情况下走BinarySearchIndexReader，返回少一层包装的IndexBlockIter*
   }
 
 }
@@ -2122,6 +2122,9 @@ bool BlockBasedTable::PrefixExtractorChanged(
   }
 }
 
+// class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue>
+// class BlockBasedTableIterator : public InternalIteratorBase<Slice>
+// using InternalIterator = InternalIteratorBase<Slice>;
 InternalIterator* BlockBasedTable::NewIterator(
     const ReadOptions& read_options, const SliceTransform* prefix_extractor,
     Arena* arena, bool skip_filters, TableReaderCaller caller,
@@ -2136,7 +2139,7 @@ InternalIterator* BlockBasedTable::NewIterator(
       read_options,
       /*disable_prefix_seek=*/need_upper_bound_check &&
           rep_->index_type == BlockBasedTableOptions::kHashSearch,
-      /*input_iter=*/nullptr, /*get_context=*/nullptr, &lookup_context)); // 关键
+      /*input_iter=*/nullptr, /*get_context=*/nullptr, &lookup_context)); // OneDRtreeSecIndexIterator类型，因为read_options.is_secondary_index_scan=true
   // std::cout << "finish creating new index iterator" << std::endl;
   
   if (arena == nullptr) {
@@ -2146,7 +2149,7 @@ InternalIterator* BlockBasedTable::NewIterator(
             prefix_extractor != nullptr,
         need_upper_bound_check, prefix_extractor, caller,
         compaction_readahead_size, allow_unprepared_value);
-  } else {
+  } else {  // 进入
     auto* mem = arena->AllocateAligned(sizeof(BlockBasedTableIterator));
     return new (mem) BlockBasedTableIterator(
         this, read_options, rep_->internal_comparator, std::move(index_iter),

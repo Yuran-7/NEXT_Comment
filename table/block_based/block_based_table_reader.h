@@ -266,7 +266,7 @@ class BlockBasedTable : public TableReader {
   // The key retrieved are internal keys.
   Status GetKVPairsFromDataBlocks(std::vector<KVPairBlock>* kv_pair_blocks);
 
-  struct Rep;
+  struct Rep; // 前向声明
 
   Rep* get_rep() { return rep_; }
   const Rep* get_rep() const { return rep_; }
@@ -295,16 +295,16 @@ class BlockBasedTable : public TableReader {
 
   friend class PartitionIndexReader;
 
-  friend class RtreeIndexReader;
+  friend class RtreeIndexReader;  // 新增
 
-  friend class RtreeSecIndexReader;
+  friend class RtreeSecIndexReader; // 新增
 
-  friend class OneDRtreeSecIndexReader;
+  friend class OneDRtreeSecIndexReader; // 新增
 
   friend class UncompressionDictReader;
 
  protected:
-  Rep* rep_;
+  Rep* rep_;  // 关键
   explicit BlockBasedTable(Rep* rep, BlockCacheTracer* const block_cache_tracer)
       : rep_(rep), block_cache_tracer_(block_cache_tracer) {}
   // No copying allowed
@@ -614,15 +614,15 @@ struct BlockBasedTable::Rep {
   const FilterPolicy* const filter_policy;
   const InternalKeyComparator& internal_comparator;
   Status status;
-  std::unique_ptr<RandomAccessFileReader> file;
+  std::unique_ptr<RandomAccessFileReader> file; // 文件句柄
   OffsetableCacheKey base_cache_key;
   PersistentCacheOptions persistent_cache_options;
 
   // Footer contains the fixed table information
   Footer footer;
 
-  std::unique_ptr<IndexReader> index_reader;
-  std::unique_ptr<IndexReader> sec_index_reader;
+  std::unique_ptr<IndexReader> index_reader;  // 主索引读取器
+  std::unique_ptr<IndexReader> sec_index_reader;  // 二级索引读取器（新增）
   std::unique_ptr<FilterBlockReader> filter;
   std::unique_ptr<UncompressionDictReader> uncompression_dict_reader;
 

@@ -1810,11 +1810,11 @@ InternalIterator* DBImpl::NewInternalIterator(
   // Collect iterator for mutable memtable
   auto mem_iter = super_version->mem->NewIterator(read_options, arena);
   Status s;
-  if (!read_options.ignore_range_deletions) {
+  if (!read_options.ignore_range_deletions) { // 进入
     TruncatedRangeDelIterator* mem_tombstone_iter = nullptr;
     auto range_del_iter = super_version->mem->NewRangeTombstoneIterator(
         read_options, sequence, false /* immutable_memtable */);
-    if (range_del_iter == nullptr || range_del_iter->empty()) {
+    if (range_del_iter == nullptr || range_del_iter->empty()) { // 进入
       delete range_del_iter;
     } else {
       mem_tombstone_iter = new TruncatedRangeDelIterator(
@@ -1823,7 +1823,7 @@ InternalIterator* DBImpl::NewInternalIterator(
           nullptr /* largest */);
     }
     merge_iter_builder.AddPointAndTombstoneIterator(mem_iter,
-                                                    mem_tombstone_iter);
+                                                    mem_tombstone_iter);  // mem_iter加入
   } else {
     merge_iter_builder.AddIterator(mem_iter);
   }
@@ -1831,7 +1831,7 @@ InternalIterator* DBImpl::NewInternalIterator(
   // Collect all needed child iterators for immutable memtables
   if (s.ok()) {
     super_version->imm->AddIterators(read_options, &merge_iter_builder,
-                                     !read_options.ignore_range_deletions);
+                                     !read_options.ignore_range_deletions); // imm加入
   }
   TEST_SYNC_POINT_CALLBACK("DBImpl::NewInternalIterator:StatusCallback", &s);
   if (s.ok()) {
@@ -3683,7 +3683,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
 
   InternalIterator* internal_iter = NewInternalIterator(
       db_iter->GetReadOptions(), cfd, sv, db_iter->GetArena(), snapshot,
-      /* allow_unprepared_value */ true, db_iter);
+      /* allow_unprepared_value */ true, db_iter);  // internal_iter动态类型是MergingIterator
   db_iter->SetIterUnderDBIter(internal_iter);
 
   return db_iter;

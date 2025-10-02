@@ -1508,7 +1508,7 @@ class VersionSet {
   // (SecIndexType) Manually Changed is needed here
   typedef RTree<GlobalSecIndexValue, double, 1, double> GlobalSecRtree; // 把1改成2，从numerical变为spatial
   GlobalSecRtree global_rtree_;
-  const char* global_rtree_loc_ = "/NV1/ysh/NEXT/examples/global_rtree";
+  const char* global_rtree_loc_ = "/NV1/ysh/NEXT/examples/testdb/global_rtree";
 
  protected:
   using VersionBuilderMap =

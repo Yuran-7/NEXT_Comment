@@ -216,7 +216,7 @@ Status TableCache::FindTable(
                        false /* sequential mode */, record_read_stats,
                        file_read_hist, &table_reader, prefix_extractor,
                        skip_filters, level, prefetch_index_and_filter_in_cache,
-                       max_file_size_for_l0_meta_pin, file_temperature);
+                       max_file_size_for_l0_meta_pin, file_temperature);  // 创建table_reader
     if (!s.ok()) {
       assert(table_reader == nullptr);
       RecordTick(ioptions_.stats, NO_FILE_ERRORS);
@@ -224,7 +224,7 @@ Status TableCache::FindTable(
       // or somebody repairs the file, we recover automatically.
     } else {
       s = cache_->Insert(key, table_reader.get(), 1, &DeleteEntry<TableReader>,
-                         handle);
+                         handle); // cahce_是LRUCache，插入table_reader
       if (s.ok()) {
         // Release ownership of table reader.
         table_reader.release();
@@ -254,10 +254,10 @@ InternalIterator* TableCache::NewIterator(
   if (table_reader_ptr != nullptr) {
     *table_reader_ptr = nullptr;
   }
-  bool for_compaction = caller == TableReaderCaller::kCompaction;
-  auto& fd = file_meta.fd;
-  table_reader = fd.table_reader;
-  if (table_reader == nullptr) {
+  bool for_compaction = caller == TableReaderCaller::kCompaction; //false
+  auto& fd = file_meta.fd;  // FileMetaData内的FileDescriptor
+  table_reader = fd.table_reader; // BlockBaseTable类从FileDescriptor内获取
+  if (table_reader == nullptr) {  // 不走这个if，但不一定不走这个
     s = FindTable(
         options, file_options, icomparator, file_meta, &handle,
         prefix_extractor, options.read_tier == kBlockCacheTier /* no_io */,
@@ -268,33 +268,33 @@ InternalIterator* TableCache::NewIterator(
       table_reader = GetTableReaderFromHandle(handle);
     }
   }
-  InternalIterator* result = nullptr;
-  if (s.ok()) {
+  InternalIterator* result = nullptr; // 定义return的迭代器
+  if (s.ok()) { // true
     if (options.table_filter &&
         !options.table_filter(*table_reader->GetTableProperties())) {
       result = NewEmptyInternalIterator<Slice>(arena);
-    } else {
+    } else {  // 进入这个分支
       result = table_reader->NewIterator(
           options, prefix_extractor.get(), arena, skip_filters, caller,
-          file_options.compaction_readahead_size, allow_unprepared_value);  // table/block_based/block_based_table_reader.cc 中的 BlockBasedTableReader
+          file_options.compaction_readahead_size, allow_unprepared_value);  // result 是 BlockBasedTableIterator
     }
-    if (handle != nullptr) {
+    if (handle != nullptr) {  // 不进入
       result->RegisterCleanup(&UnrefEntry, cache_, handle);
       handle = nullptr;  // prevent from releasing below
     }
 
-    if (for_compaction) {
+    if (for_compaction) { // 不进入
       table_reader->SetupForCompaction();
     }
-    if (table_reader_ptr != nullptr) {
+    if (table_reader_ptr != nullptr) {  // 不进入
       *table_reader_ptr = table_reader;
     }
   }
-  if (s.ok() && !options.ignore_range_deletions) {
-    if (range_del_iter != nullptr) {
+  if (s.ok() && !options.ignore_range_deletions) {  // 进入，但没啥影响
+    if (range_del_iter != nullptr) {  // 进入
       auto new_range_del_iter =
           table_reader->NewRangeTombstoneIterator(options);
-      if (new_range_del_iter == nullptr || new_range_del_iter->empty()) {
+      if (new_range_del_iter == nullptr || new_range_del_iter->empty()) { // 进入
         delete new_range_del_iter;
         *range_del_iter = nullptr;
       } else {
@@ -304,7 +304,7 @@ InternalIterator* TableCache::NewIterator(
             &icomparator, &file_meta.smallest, &file_meta.largest);
       }
     }
-    if (range_del_agg != nullptr) {
+    if (range_del_agg != nullptr) { // 不进入
       if (range_del_agg->AddFile(fd.GetNumber())) {
         std::unique_ptr<FragmentedRangeTombstoneIterator> new_range_del_iter(
             static_cast<FragmentedRangeTombstoneIterator*>(
