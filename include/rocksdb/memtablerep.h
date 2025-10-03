@@ -358,13 +358,13 @@ class SkipListFactory : public MemTableRepFactory {
   static const char* kNickName() { return "skip_list"; }
   virtual const char* Name() const override { return kClassName(); }
   virtual const char* NickName() const override { return kNickName(); }
-  std::string GetId() const override;
+  std::string GetId() const override; // 定义在 memtable/skiplistrep.cc
 
   // Methods for MemTableRepFactory class overrides
   using MemTableRepFactory::CreateMemTableRep;
   virtual MemTableRep* CreateMemTableRep(const MemTableRep::KeyComparator&,
                                          Allocator*, const SliceTransform*,
-                                         Logger* logger) override;
+                                         Logger* logger) override;  // 定义在 memtable/skiplistrep.cc
 
   bool IsInsertConcurrentlySupported() const override { return true; }
 

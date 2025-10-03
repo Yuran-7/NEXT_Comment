@@ -445,14 +445,14 @@ class SkipListSecRep : public SkipListRep {
 
     class Iterator : public SkipListRep::Iterator {
       public:
-        explicit Iterator(
+        explicit Iterator(  
                 const InlineSkipList<const MemTableRep::KeyComparator&>* list,
-                IteratorContext* iterator_context)
+                IteratorContext* iterator_context)  // options.h中struct IteratorContext {};
                 : SkipListRep::Iterator(list) {
             if (iterator_context != nullptr){
           
                 RtreeIteratorContext* context =
-                    reinterpret_cast<RtreeIteratorContext*>(iterator_context);
+                    reinterpret_cast<RtreeIteratorContext*>(iterator_context);  // util/rtree.h，RtreeIteratorContext继承自IteratorContext
                 Slice query_slice = Slice(context->query_mbr);
 
                 // TODO(PepperBun): auto change type of secondary query attribute
@@ -461,10 +461,10 @@ class SkipListSecRep : public SkipListRep {
                 // if query_slice.size == 16: one-d value range
                 // if query_slice.size == 32: two-d mbr
                 // std::cout << "query slice size: " << query_slice.size() << std::endl;
-                if (query_slice.size() == 16) {
+                if (query_slice.size() == 16) { // 按一维数值范围过滤
                   // std::cout << "query range initialized" << std::endl;
-                  query_valrange_ = ReadValueRange(query_slice);
-                } else {
+                  query_valrange_ = ReadValueRange(query_slice);  // util/rtree.cc
+                } else {  // 否则视为二维 MBR，按矩形是否相交过滤
                   query_mbr_ = ReadSecQueryMbr(query_slice);
                 }
                 // std::cout << "query mbr: " << query_mbr_ << std::endl;
@@ -480,7 +480,7 @@ class SkipListSecRep : public SkipListRep {
         virtual void Next() override {
             // std::cout << "SkipListRep::Next()" << std::endl;
             SkipListRep::Iterator::Next();
-            NextIfDisjoint();
+            NextIfDisjoint(); // 核心差异
         }
 
         virtual void SeekToFirst() override {

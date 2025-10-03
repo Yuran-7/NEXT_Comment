@@ -41,7 +41,7 @@ class CompareInterface {
 // Exceptions MUST NOT propagate out of overridden functions into RocksDB,
 // because RocksDB is not exception-safe. This could cause undefined behavior
 // including data loss, unreported corruption, deadlocks, and more.
-class Comparator : public Customizable, public CompareInterface {
+class Comparator : public Customizable, public CompareInterface { // Comparator：只负责 用户 key 的比较逻辑
  public:
   Comparator() : timestamp_size_(0) {}
 

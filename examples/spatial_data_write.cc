@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
             // std::cout << "In Key: " << id << low[0] << low[1] << std::endl;
             // Put key-value
             auto start = std::chrono::high_resolution_clock::now();
-            s = db->Put(WriteOptions(), key, "");
+            s = db->Put(WriteOptions(), key, ""); // 只在key中有数据
             auto end = std::chrono::high_resolution_clock::now(); 
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
             totalDuration = totalDuration + duration;

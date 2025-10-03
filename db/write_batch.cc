@@ -1707,7 +1707,7 @@ class MemTableInserter : public WriteBatch::Handler {
 
   SequenceNumber sequence_;
   ColumnFamilyMemTables* const cf_mems_;
-  FlushScheduler* const flush_scheduler_;
+  FlushScheduler* const flush_scheduler_; // db/flush_scheduler.h
   TrimHistoryScheduler* const trim_history_scheduler_;
   const bool ignore_missing_column_families_;
   const uint64_t recovering_log_number_;
@@ -2557,7 +2557,7 @@ class MemTableInserter : public WriteBatch::Handler {
           cfd->mem()->MarkFlushScheduled()) {
         // MarkFlushScheduled only returns true if we are the one that
         // should take action, so no need to dedup further
-        flush_scheduler_->ScheduleWork(cfd);
+        flush_scheduler_->ScheduleWork(cfd);  // MemTableInserter的一个成员变量
       }
     }
     // check if memtable_list size exceeds max_write_buffer_size_to_maintain
@@ -2838,7 +2838,7 @@ Status WriteBatchInternal::InsertInto(
       sequence, memtables, flush_scheduler, trim_history_scheduler,
       ignore_missing_column_families, recovery_log_number, db,
       concurrent_memtable_writes, nullptr /* prot_info */,
-      nullptr /*has_valid_writes*/, seq_per_batch, batch_per_txn);
+      nullptr /*has_valid_writes*/, seq_per_batch, batch_per_txn);  // MemTableInserter继承Handler
   for (auto w : write_group) {
     if (w->CallbackFailed()) {
       continue;
@@ -2852,13 +2852,13 @@ Status WriteBatchInternal::InsertInto(
     SetSequence(w->batch, inserter.sequence());
     inserter.set_log_number_ref(w->log_ref);
     inserter.set_prot_info(w->batch->prot_info_.get());
-    w->status = w->batch->Iterate(&inserter);
+    w->status = w->batch->Iterate(&inserter); // w是Writer， batch是WriteBatch
     if (!w->status.ok()) {
       return w->status;
     }
     assert(!seq_per_batch || w->batch_cnt != 0);
     assert(!seq_per_batch || inserter.sequence() - w->sequence == w->batch_cnt);
-  }
+  } // for
   return Status::OK();
 }
 

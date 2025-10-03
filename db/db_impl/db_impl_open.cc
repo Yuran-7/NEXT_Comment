@@ -216,7 +216,7 @@ Status ValidateOptionsByTable(
     const std::vector<ColumnFamilyDescriptor>& column_families) {
   Status s;
   for (auto cf : column_families) {
-    s = ValidateOptions(db_opts, cf.options);
+    s = ValidateOptions(db_opts, cf.options); // options/options_helper.cc
     if (!s.ok()) {
       return s;
     }
@@ -1611,7 +1611,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   std::vector<ColumnFamilyDescriptor> column_families;
   column_families.push_back(
       ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
-  if (db_options.persist_stats_to_disk) {
+  if (db_options.persist_stats_to_disk) { // 不进入
     column_families.push_back(
         ColumnFamilyDescriptor(kPersistentStatsColumnFamilyName, cf_options));
   }
@@ -1636,8 +1636,8 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
 Status DB::Open(const DBOptions& db_options, const std::string& dbname,
                 const std::vector<ColumnFamilyDescriptor>& column_families,
                 std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {
-  const bool kSeqPerBatch = true;
-  const bool kBatchPerTxn = true;
+  const bool kSeqPerBatch = true; // 整个 batch 只有一个序列号，但传入的时候是 false
+  const bool kBatchPerTxn = true; // RocksDB 在内部会将 WriteBatch 看作事务（Transaction），可以保证原子性和一致性
   return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                       !kSeqPerBatch, kBatchPerTxn);
 }
@@ -1778,7 +1778,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
         std::max(max_write_buffer_size, cf.options.write_buffer_size);
   }
 
-  DBImpl* impl = new DBImpl(db_options, dbname, seq_per_batch, batch_per_txn);
+  DBImpl* impl = new DBImpl(db_options, dbname, seq_per_batch, batch_per_txn);  // seq_per_batch和batch_per_txn都是DBImpl的成员变量
   if (!impl->immutable_db_options_.info_log) {
     s = impl->init_logger_creation_s_;
     delete impl;

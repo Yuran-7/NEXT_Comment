@@ -118,7 +118,7 @@ void DBImpl::SetRecoverableStatePreReleaseCallback(
 
 Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
   Status s;
-  if (write_options.protection_bytes_per_key > 0) {
+  if (write_options.protection_bytes_per_key > 0) { // 不进入，每个用户 key 要不要额外生成“保护字节”（protection bytes）
     s = WriteBatchInternal::UpdateProtectionInfo(
         my_batch, write_options.protection_bytes_per_key);
   }
@@ -283,15 +283,15 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     return PipelinedWriteImpl(write_options, my_batch, callback, log_used,
                               log_ref, disable_memtable, seq_used);
   }
-
-  PERF_TIMER_GUARD(write_pre_and_post_process_time);
+  // 用来跟踪 写入操作在正式写之前和写之后处理阶段 的耗时
+  PERF_TIMER_GUARD(write_pre_and_post_process_time);  // 在当前作用域内声明一个定时器，并立即开始计时
   WriteThread::Writer w(write_options, my_batch, callback, log_ref,
                         disable_memtable, batch_cnt, pre_release_callback,
-                        post_memtable_callback);
+                        post_memtable_callback);  // WriteThread是一个类，Writer是它的嵌套结构体
   StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
 
-  write_thread_.JoinBatchGroup(&w);
-  if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) {
+  write_thread_.JoinBatchGroup(&w); // DBImpl的成员变量 write_thread_ 是一个 WriteThread 对象
+  if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) { // 并行写入的跟随者
     // we are a non-leader in a parallel group
 
     if (w.ShouldWriteToMemtable()) {
@@ -363,7 +363,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     // PreprocessWrite does its own perf timing.
     PERF_TIMER_STOP(write_pre_and_post_process_time);
 
-    status = PreprocessWrite(write_options, &log_context, &write_context);
+    status = PreprocessWrite(write_options, &log_context, &write_context);  // 组长前置处理（必要的准备）：切 WAL、滚动文件、写可恢复状态、挑选/触发 flush/compaction 等前置工作。失败会直接短路。
     if (!two_write_queues_) {
       // Assign it after ::PreprocessWrite since the sequence might advance
       // inside it by WriteRecoverableState
@@ -380,7 +380,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
   TEST_SYNC_POINT("DBImpl::WriteImpl:BeforeLeaderEnters");
   last_batch_group_size_ =
-      write_thread_.EnterAsBatchGroupLeader(&w, &write_group);
+      write_thread_.EnterAsBatchGroupLeader(&w, &write_group);  // 获取本次批组
 
   IOStatus io_s;
   Status pre_release_cb_status;
@@ -434,7 +434,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     // disalbe_memtable in between; although we do not write this batch to
     // memtable it still consumes a seq. Otherwise, if !seq_per_batch_, we inc
     // the seq per valid written key to mem.
-    size_t seq_inc = seq_per_batch_ ? valid_batches : total_count;
+    size_t seq_inc = seq_per_batch_ ? valid_batches : total_count;  // 计算序列号增量
 
     const bool concurrent_update = two_write_queues_;
     // Update stats while we are an exclusive group leader, so we know
@@ -465,7 +465,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
     PERF_TIMER_STOP(write_pre_and_post_process_time);
 
-    if (!two_write_queues_) {
+    if (!two_write_queues_) { // 单队列模式
       if (status.ok() && !write_options.disableWAL) {
         assert(log_context.log_file_number_size);
         LogFileNumberSize& log_file_number_size =
@@ -476,7 +476,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
                        log_context.need_log_sync, log_context.need_log_dir_sync,
                        last_sequence + 1, log_file_number_size);
       }
-    } else {
+    } else {  // 双队列并发 WAL
       if (status.ok() && !write_options.disableWAL) {
         PERF_TIMER_GUARD(write_wal_time);
         // LastAllocatedSequence is increased inside WriteToWAL under
@@ -493,7 +493,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     const SequenceNumber current_sequence = last_sequence + 1;
     last_sequence += seq_inc;
 
-    // PreReleaseCallback is called after WAL write and before memtable write
+    // PreReleaseCallback is called after WAL write and before memtable write，PreRelease 回调（如果用户配置了）
     if (status.ok()) {
       SequenceNumber next_sequence = current_sequence;
       size_t index = 0;
@@ -522,14 +522,14 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
           next_sequence += WriteBatchInternal::Count(writer->batch);
         }
       }
-    }
+    } // 明显没有设置
 
     if (status.ok()) {
       PERF_TIMER_GUARD(write_memtable_time);
 
-      if (!parallel) {
+      if (!parallel) {  // 串行写入
         // w.sequence will be set inside InsertInto
-        w.status = WriteBatchInternal::InsertInto(
+        w.status = WriteBatchInternal::InsertInto(  // w是Writer对象
             write_group, current_sequence, column_family_memtables_.get(),
             &flush_scheduler_, &trim_history_scheduler_,
             write_options.ignore_missing_column_families,
@@ -576,7 +576,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     assert(pre_release_cb_status.ok());
   }
 
-  if (log_context.need_log_sync) {
+  if (log_context.need_log_sync) {  // 如果本次需要 sync（log_context.need_log_sync），处理 MarkLogsSynced/SyncWAL/FlushWAL/ApplyWALToManifest 等，确保 WAL 的持久化承诺兑现
     VersionEdit synced_wals;
     log_write_mutex_.Lock();
     if (status.ok()) {
@@ -622,7 +622,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       }
       // Note: if we are to resume after non-OK statuses we need to revisit how
       // we reacts to non-OK statuses here.
-      versions_->SetLastSequence(last_sequence);
+      versions_->SetLastSequence(last_sequence);  // 推进全局可见的最后序列号
     }
     MemTableInsertStatusCheck(w.status);
     write_thread_.ExitAsBatchGroupLeader(write_group, status);
@@ -2250,7 +2250,7 @@ Status DB::Put(const WriteOptions& opt, ColumnFamilyHandle* column_family,
   // and we allocate 11 extra bytes for key length, as well as value length.
   WriteBatch batch(key.size() + value.size() + 24, 0 /* max_bytes */,
                    opt.protection_bytes_per_key, 0 /* default_cf_ts_sz */);
-  Status s = batch.Put(column_family, key, value);
+  Status s = batch.Put(column_family, key, value);  // 构造一个 WriteBatch
   if (!s.ok()) {
     return s;
   }

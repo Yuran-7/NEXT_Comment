@@ -34,9 +34,9 @@ std::string serialize_key(uint64_t iid, double xValue, double yValue) {
     return key;
 }
 
-std::string serialize_id(int iid) {
-    std::string key;
-    key.append(reinterpret_cast<const char*>(&iid), sizeof(int));
+std::string serialize_id(int iid) { // int类型的key，如果想让它按整数值大小排序，请确保 key 的序列化使用大端序（big-endian）
+    std::string key;  // 但实际上目前是小端序，256  (00 01 00 00)，1  (01 00 00 00)，256 会排在 1 前面
+    key.append(reinterpret_cast<const char*>(&iid), sizeof(int)); 
     return key;
 }
 
@@ -159,25 +159,25 @@ int main(int argc, char* argv[]) {
     options.info_log_level = DEBUG_LEVEL;
     options.statistics = rocksdb::CreateDBStatistics();
 
-    options.max_write_buffer_number = 5;
-    options.max_background_jobs = 8;   
+    options.max_write_buffer_number = 5;  // 可变MemTable：1个（固定） + 不可变MemTable：4个（可变）
+    options.max_background_jobs = 8;   // max_flushes = 2, max_compactions = 6
 
     BlockBasedTableOptions block_based_options;
 
     // For per file secondary index in SST file
     block_based_options.create_secondary_index = true;
     block_based_options.create_sec_index_reader = true;
-    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec;
+    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // 默认是 kRtreeSec
     
     // For global secondary index in memory
-    options.create_global_sec_index = true;
+    options.create_global_sec_index = true; // include/rocksdb/advanced_options.h
     // To indicate the index attribute type
-    options.global_sec_index_is_spatial = false;
+    options.global_sec_index_is_spatial = false;  // 默认是true
 
     options.table_factory.reset(NewBlockBasedTableFactory(block_based_options));
     options.memtable_factory.reset(new rocksdb::SkipListSecFactory);
     
-    options.allow_concurrent_memtable_write = false;
+    options.allow_concurrent_memtable_write = false;  // 同一时间只有一个线程可以写入 MemTable
 
     // Set the write buffer size to 64 MB
     options.write_buffer_size = 64 * 1024 * 1024;
@@ -294,7 +294,7 @@ g++ -g3 -O0 -std=c++17 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
   -o secondary_index_data_write_num ../librocksdb_debug.a \
-  -I../include -I.. -O2 \
+  -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
  */
 

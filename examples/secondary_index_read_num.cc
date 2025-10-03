@@ -67,11 +67,11 @@ public:
         // keypaths are the same, compare the value. The previous
         // `GetLengthPrefixedSlice()` did advance the Slice already, hence a call
         // to `.data()` can directly be used.
-        const int* value_a = reinterpret_cast<const int*>(slice_a.data());
+        const int* value_a = reinterpret_cast<const int*>(slice_a.data());  // 意义不明
         const int* value_b = reinterpret_cast<const int*>(slice_b.data());
 
 
-        return slice_a.compare(slice_b);
+        return slice_a.compare(slice_b);  // Slice类的一个方法
     }
 
     void FindShortestSeparator(std::string* start,

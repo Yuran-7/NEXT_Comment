@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
     options.memtable_factory.reset(new rocksdb::SkipListSecFactory);
     
     options.allow_concurrent_memtable_write = false;
-    options.force_consistency_checks = false;
+    options.force_consistency_checks = false; // 默认true，RocksDB 在打开数据库（DB::Open()）时，会强制执行一些一致性检查，为false时，RocksDB 跳过一部分一致性检查，即使元数据有点小问题也可能继续运行
 
     // Set the write buffer size to 64 MB
     options.write_buffer_size = 16 * 1024 * 1024;
