@@ -1158,7 +1158,7 @@ Status ColumnFamilyData::RangesOverlapWithMemtables(
   ReadOptions read_opts;
   read_opts.total_order_seek = true;
   // MergeIteratorBuilder merge_iter_builder(&internal_comparator_, &arena);
-  MergeIteratorBuilder merge_iter_builder(&internal_sec_comparator_, &arena);
+  MergeIteratorBuilder merge_iter_builder(&internal_sec_comparator_, &arena); // 用意不明
   merge_iter_builder.AddIterator(
       super_version->mem->NewIterator(read_opts, &arena));
   super_version->imm->AddIterators(read_opts, &merge_iter_builder,

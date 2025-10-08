@@ -2016,7 +2016,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
       // 它访问的只是“内存里的元数据（来自 MANIFEST 重放/Version 构建时填充），并不意味着对应的 SST 文件已经被“打开”，file类型是FdWithKeyRange
       const auto& file = storage_info_.LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];  // 根据 hfile_loc 的 Level 和在该 Level 中的位置，找到对应的文件简要信息，并用只读引用绑定到 file
       auto table_iter = cfd_->table_cache()->NewIterator( // cfd_是ColumnFamilyData类型的指针，是Version的成员变量
-          read_options, soptions, cfd_->internal_sec_comparator(),
+          read_options, soptions, cfd_->internal_sec_comparator(),  // 注意这个比较器
           *file.file_metadata, /*range_del_agg=*/nullptr,
           mutable_cf_options_.prefix_extractor, nullptr,
           cfd_->internal_stats()->GetFileReadHist(0),

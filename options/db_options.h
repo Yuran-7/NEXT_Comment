@@ -13,7 +13,7 @@
 namespace ROCKSDB_NAMESPACE {
 class SystemClock;
 
-struct ImmutableDBOptions {
+struct ImmutableDBOptions { // 这里面有的选项，DBOptions里面也有
   static const char* kName() { return "ImmutableDBOptions"; }
   ImmutableDBOptions();
   explicit ImmutableDBOptions(const DBOptions& options);

@@ -1804,7 +1804,7 @@ InternalIterator* DBImpl::NewInternalIterator(
   //     !read_options.total_order_seek &&
   //         super_version->mutable_cf_options.prefix_extractor != nullptr);
   MergeIteratorBuilder merge_iter_builder(
-      &cfd->internal_sec_comparator(), arena,
+      &cfd->internal_sec_comparator(), arena, // 这个比较器等于不比较
       !read_options.total_order_seek &&
           super_version->mutable_cf_options.prefix_extractor != nullptr);
   // Collect iterator for mutable memtable
@@ -3544,7 +3544,7 @@ bool DBImpl::KeyMayExist(const ReadOptions& read_options,
 }
 
 Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
-                              ColumnFamilyHandle* column_family) {
+                              ColumnFamilyHandle* column_family) {  // 单 CF 迭代器创建
   if (read_options.managed) {
     return NewErrorIterator(
         Status::NotSupported("Managed iterator is not supported anymore."));
@@ -3594,7 +3594,7 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
         sv->mutable_cf_options.max_sequential_skip_in_iterations, read_callback,
         this, cfd);
 #endif
-  } else {
+  } else {  // 进入
     // Note: no need to consider the special case of
     // last_seq_same_as_publish_seq_==false since NewIterator is overridden in
     // WritePreparedTxnDB
@@ -3692,7 +3692,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
 Status DBImpl::NewIterators(
     const ReadOptions& read_options,
     const std::vector<ColumnFamilyHandle*>& column_families,
-    std::vector<Iterator*>* iterators) {
+    std::vector<Iterator*>* iterators) {  // 多 CF 迭代器批量创建
   if (read_options.managed) {
     return Status::NotSupported("Managed iterator is not supported anymore.");
   }

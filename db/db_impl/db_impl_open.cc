@@ -511,7 +511,7 @@ Status DBImpl::Recover(
   Status s;
   bool missing_table_file = false;
   if (!immutable_db_options_.best_efforts_recovery) {
-    s = versions_->Recover(column_families, read_only, &db_id_);
+    s = versions_->Recover(column_families, read_only, &db_id_);  // std::unique_ptr<VersionSet> versions_;成员变量
   } else {
     assert(!files_in_dbname.empty());
     s = versions_->TryRecover(column_families, read_only, files_in_dbname,
@@ -1605,7 +1605,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
   return s;
 }
 
-Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
+Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {  // 如果定义了其他列簇，不会进入这个函数
   DBOptions db_options(options);
   ColumnFamilyOptions cf_options(options);
   std::vector<ColumnFamilyDescriptor> column_families;
@@ -1616,7 +1616,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
         ColumnFamilyDescriptor(kPersistentStatsColumnFamilyName, cf_options));
   }
   std::vector<ColumnFamilyHandle*> handles;
-  Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
+  Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);  // options进入了db_options和column_families
   if (s.ok()) {
     if (db_options.persist_stats_to_disk) {
       assert(handles.size() == 2);
@@ -1634,8 +1634,8 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
 }
 
 Status DB::Open(const DBOptions& db_options, const std::string& dbname,
-                const std::vector<ColumnFamilyDescriptor>& column_families,
-                std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {
+                const std::vector<ColumnFamilyDescriptor>& column_families, // ColumnFamilyDescriptor是用户传入的
+                std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {  // ColumnFamilyHandle是生成的
   const bool kSeqPerBatch = true; // 整个 batch 只有一个序列号，但传入的时候是 false
   const bool kBatchPerTxn = true; // RocksDB 在内部会将 WriteBatch 看作事务（Transaction），可以保证原子性和一致性
   return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
@@ -1825,7 +1825,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
   // Handles create_if_missing, error_if_exists
   uint64_t recovered_seq(kMaxSequenceNumber);
   s = impl->Recover(column_families, false, false, false, &recovered_seq,
-                    &recovery_ctx);
+                    &recovery_ctx); // NewDB
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     log::Writer* new_log = nullptr;

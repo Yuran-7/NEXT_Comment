@@ -103,7 +103,7 @@ extern const double kIncSlowdownRatio;
 // DBImpl keeps a ColumnFamilySet, which references to all column families by
 // pointing to respective ColumnFamilyData object of each column family.
 // This is how DBImpl can list and operate on all the column families.
-// ColumnFamilyHandle also points to ColumnFamilyData directly, so that
+// ColumnFamilyHandle 直接指向 ColumnFamilyData, so that
 // when a user executes a query, it can directly find memtables and Version
 // as well as SuperVersion to the column family, without going through
 // ColumnFamilySet.

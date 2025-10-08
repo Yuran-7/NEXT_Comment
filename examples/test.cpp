@@ -11,8 +11,30 @@ int main() {
     int id = 1;
     std::string key = serialize_id(id);
     std::cout << "Serialized key size: " << key.size() << std::endl;
-    for (size_t i = 0; i < key.size(); ++i) {
-        printf("Byte %zu: 0x%02x\n", i, static_cast<unsigned char>(key[i]));
+    
+    // 以十六进制格式打印二进制数据
+    std::cout << "Key (hex): ";
+    for (unsigned char c : key) {
+        printf("%02x ", c);
     }
+    std::cout << std::endl;
+    
+    // 再测试一个更大的数字
+    int id2 = 256;
+    std::string key2 = serialize_id(id2);
+    std::cout << "\nFor id = 256:" << std::endl;
+    std::cout << "Key (hex): ";
+    for (unsigned char c : key2) {
+        printf("%02x ", c);
+    }
+    std::cout << std::endl;
+    
+    // 比较两个key的字典序
+    if (key < key2) {
+        std::cout << "\n1 < 256 (correct order)" << std::endl;
+    } else {
+        std::cout << "\n1 > 256 (WRONG order! 小端序导致)" << std::endl;
+    }
+    
     return 0;
 }
