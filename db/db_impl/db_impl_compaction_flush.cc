@@ -2494,7 +2494,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
   if (is_flush_pool_empty) {
     while (unscheduled_flushes_ > 0 &&
            bg_flush_scheduled_ + bg_compaction_scheduled_ <
-               bg_job_limits.max_flushes) {
+               bg_job_limits.max_flushes) { // 检查是否有待处理的flush && 后台线程是否有空闲
       bg_flush_scheduled_++;
       FlushThreadArg* fta = new FlushThreadArg;
       fta->db_ = this;
@@ -2646,8 +2646,8 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
       cfd->Ref();
       cfd->set_queued_for_flush(true);
       cfd->SetFlushReason(flush_reason);
-      ++unscheduled_flushes_;
-      flush_queue_.push_back(flush_req);
+      ++unscheduled_flushes_; // 将flush任务加入队列
+      flush_queue_.push_back(flush_req);  // 加入待处理队列
     }
   } else {
     for (auto& iter : flush_req) {
@@ -2681,7 +2681,7 @@ void DBImpl::BGWorkFlush(void* arg) {
 
   IOSTATS_SET_THREAD_POOL_ID(fta.thread_pri_);
   TEST_SYNC_POINT("DBImpl::BGWorkFlush");
-  static_cast_with_check<DBImpl>(fta.db_)->BackgroundCallFlush(fta.thread_pri_);
+  static_cast_with_check<DBImpl>(fta.db_)->BackgroundCallFlush(fta.thread_pri_);  // 调用实例方法
   TEST_SYNC_POINT("DBImpl::BGWorkFlush:done");
 }
 
@@ -2826,7 +2826,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
           bg_compaction_scheduled_);
     }
     status = FlushMemTablesToOutputFiles(bg_flush_args, made_progress,
-                                         job_context, log_buffer, thread_pri);
+                                         job_context, log_buffer, thread_pri);  // 调用FlushMemTableToOutputFile
     TEST_SYNC_POINT("DBImpl::BackgroundFlush:BeforeFlush");
     // All the CFDs in the FlushReq must have the same flush reason, so just
     // grab the first one
@@ -2855,7 +2855,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:Start:1");
   TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:Start:2");
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_); // 加锁
     assert(bg_flush_scheduled_);
     num_running_flushes_++;
 
@@ -2865,7 +2865,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     FlushReason reason;
 
     Status s = BackgroundFlush(&made_progress, &job_context, &log_buffer,
-                               &reason, thread_pri);
+                               &reason, thread_pri);  // 执行实际的flush工作
     if (!s.ok() && !s.IsShutdownInProgress() && !s.IsColumnFamilyDropped() &&
         reason != FlushReason::kErrorRecovery) {
       // Wait a little bit before retrying background flush in
@@ -2892,7 +2892,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     // If flush failed, we want to delete all temporary files that we might have
     // created. Thus, we force full scan in FindObsoleteFiles()
     FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress() &&
-                                        !s.IsColumnFamilyDropped());
+                                        !s.IsColumnFamilyDropped());  // 清理工作
     // delete unnecessary files if any, this is done outside the mutex
     if (job_context.HaveSomethingToClean() ||
         job_context.HaveSomethingToDelete() || !log_buffer.IsEmpty()) {
@@ -2916,7 +2916,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     num_running_flushes_--;
     bg_flush_scheduled_--;
     // See if there's more work to be done
-    MaybeScheduleFlushOrCompaction();
+    MaybeScheduleFlushOrCompaction(); // 检查是否还有待处理的flush
     atomic_flush_install_cv_.SignalAll();
     bg_cv_.SignalAll();
     // IMPORTANT: there should be no code after calling SignalAll. This call may

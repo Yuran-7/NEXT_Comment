@@ -1941,7 +1941,7 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
     flush_scheduler_.Clear();
   } else {
     ColumnFamilyData* tmp_cfd;
-    while ((tmp_cfd = flush_scheduler_.TakeNextColumnFamily()) != nullptr) {
+    while ((tmp_cfd = flush_scheduler_.TakeNextColumnFamily()) != nullptr) {  // 从flush_scheduler_中取出待flush的CF
       cfds.push_back(tmp_cfd);
     }
     MaybeFlushStatsCF(&cfds);
@@ -1954,7 +1954,7 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   for (auto& cfd : cfds) {
     if (!cfd->mem()->IsEmpty()) {
-      status = SwitchMemtable(cfd, context);
+      status = SwitchMemtable(cfd, context);  // ⚠️ 关键：主线程在这里切换memtable
     }
     if (cfd->UnrefAndTryDelete()) {
       cfd = nullptr;
@@ -1978,10 +1978,10 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
       for (auto* cfd : cfds) {
         FlushRequest flush_req;
         GenerateFlushRequest({cfd}, &flush_req);
-        SchedulePendingFlush(flush_req, FlushReason::kWriteBufferFull);
+        SchedulePendingFlush(flush_req, FlushReason::kWriteBufferFull); // 将flush请求加入队列
       }
     }
-    MaybeScheduleFlushOrCompaction();
+    MaybeScheduleFlushOrCompaction(); // 调度后台线程
   }
   return status;
 }

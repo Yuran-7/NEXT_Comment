@@ -283,7 +283,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
     s = Status::OK();
   } else {
     // This will release and re-acquire the mutex.
-    s = WriteLevel0Table();
+    s = WriteLevel0Table(); // BuildTable
   }
 
   if (s.ok() && cfd_->IsDropped()) {
@@ -298,7 +298,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
     cfd_->imm()->RollbackMemtableFlush(mems_, meta_.fd.GetNumber());
   } else if (write_manifest_) {
     TEST_SYNC_POINT("FlushJob::InstallResults");
-    // Replace immutable memtable with the generated Table
+    // Replace immutable memtable with the generated Table，将新SST加入LSM树
     s = cfd_->imm()->TryInstallMemtableFlushResults(
         cfd_, mutable_cf_options_, mems_, prep_tracker, versions_, db_mutex_,
         meta_.fd.GetNumber(), &job_context_->memtables_to_free, db_directory_,
@@ -861,7 +861,7 @@ Status FlushJob::WriteLevel0Table() {
           db_options_.info_log,
           "[%s] [JOB %d] Flushing memtable with next log file: %" PRIu64 "\n",
           cfd_->GetName().c_str(), job_context_->job_id, m->GetNextLogNumber());
-      memtables.push_back(m->NewIterator(ro, &arena));
+      memtables.push_back(m->NewIterator(ro, &arena));  // 为memtable创建迭代器
       auto* range_del_iter = m->NewRangeTombstoneIterator(
           ro, kMaxSequenceNumber, true /* immutable_memtable */);
       if (range_del_iter != nullptr) {
@@ -885,7 +885,7 @@ Status FlushJob::WriteLevel0Table() {
     {
       ScopedArenaIterator iter(
           NewMergingIterator(&cfd_->internal_comparator(), memtables.data(),
-                             static_cast<int>(memtables.size()), &arena));
+                             static_cast<int>(memtables.size()), &arena));  // 创建合并迭代器
       ROCKS_LOG_INFO(db_options_.info_log,
                      "[%s] [JOB %d] Level-0 flush table #%" PRIu64 ": started",
                      cfd_->GetName().c_str(), job_context_->job_id,
@@ -945,7 +945,7 @@ Status FlushJob::WriteLevel0Table() {
           BlobFileCreationReason::kFlush, seqno_to_time_mapping_, event_logger_,
           job_context_->job_id, io_priority, &table_properties_, write_hint,
           full_history_ts_low, blob_callback_, &num_input_entries,
-          &memtable_payload_bytes, &memtable_garbage_bytes);
+          &memtable_payload_bytes, &memtable_garbage_bytes);  // 调用BuildTable构建SST
       // TODO: Cleanup io_status in BuildTable and table builders
       assert(!s.ok() || io_s.ok());
       io_s.PermitUncheckedError();
@@ -1006,7 +1006,7 @@ Status FlushJob::WriteLevel0Table() {
                    meta_.oldest_blob_file_number, meta_.oldest_ancester_time,
                    meta_.file_creation_time, meta_.file_checksum,
                    meta_.file_checksum_func_name, meta_.unique_id, meta_.mbr, meta_.sketch,
-                   meta_.SecValrange, meta_.SecondaryEntries);
+                   meta_.SecValrange, meta_.SecondaryEntries);  // 将新创建的SST文件信息添加到VersionEdit中
     
     // ROCKS_LOG_DEBUG(db_options_.info_log, "Flushed T0 SST File, mbr: %s \n, sketch: %s \n", meta_.mbr.toString().c_str(), meta_.sketch.toString().c_str());
 

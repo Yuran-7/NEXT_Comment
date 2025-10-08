@@ -740,7 +740,7 @@ class VersionBuilder::Rep {
 
     assert(base_vstorage_);
     const FileMetaData* const meta =
-        base_vstorage_->GetFileMetaDataByNumber(file_number);
+        base_vstorage_->GetFileMetaDataByNumber(file_number); // VersionStorageInfo类型，定义在db/version_set.h
     assert(meta);
 
     return meta->SecValrange;
@@ -1109,7 +1109,7 @@ class VersionBuilder::Rep {
 
       // if global rtree is activated
       // remove entry from global rtree for each deleted files
-      if(ioptions_->global_sec_index) {
+      if(ioptions_->global_sec_index) { //ImmutableCFOptions，定义在
         if (!ioptions_->global_sec_index_is_spatial){ // 一维
           // const ValueRange valrange = GetValRangeForTableFile(level, file_number);
           // Rect1D filerect(valrange.range.min, valrange.range.max);
@@ -1157,29 +1157,32 @@ class VersionBuilder::Rep {
     }
 
     // Add new table files
+    // 【全局R树构建的核心步骤】遍历新增的SST文件，将其二级索引条目插入到全局R树
     for (const auto& new_file : edit->GetNewFiles()) {
       const int level = new_file.first;
-      const FileMetaData& meta = new_file.second;
+      const FileMetaData& meta = new_file.second;  // meta包含了builder.cc中通过UpdateSecEntries保存的GL条目
 
       // Add an entry to global rtree for each new file
-      // the index value will be rect based on mbr
-      // the index data contains file level and filenumber
+      // 为每个新文件的每个二级索引条目添加到全局R树
+      // 索引键(Rect)：基于value range的矩形边界
+      // 索引值(GlobalSecIndexValue)：包含索引ID、文件号、BlockHandle
       if(ioptions_->global_sec_index) {
         const uint64_t filenumber = meta.fd.GetNumber();
-        if (!ioptions_->global_sec_index_is_spatial) {
+        if (!ioptions_->global_sec_index_is_spatial) {  // 一维R树（数值型二级索引）
           // ValueRange filevalrange = meta.valrange;
           // Rect1D filerect(filevalrange.range.min, filevalrange.range.max);
           // global_rtree.Insert(filerect.min, filerect.max, std::make_pair(level, filenumber));
 
-          std::vector<std::pair<ValueRange, BlockHandle>> filetuple_entries_num = meta.SecValrange;
+          std::vector<std::pair<ValueRange, BlockHandle>> filetuple_entries_num = meta.SecValrange;  // 从FileMetaData提取GL条目
 
-          int rtree_id_num = 0;
-          for (const std::pair<ValueRange, BlockHandle>& entry: filetuple_entries_num) {
-            ValueRange entryvalrange = entry.first;
-            BlockHandle entryblkhandle_num = entry.second;
-            GlobalSecIndexValue sec_indexvalnum(rtree_id_num, filenumber, entryblkhandle_num);
-            Rect1D tuplerect_num(entryvalrange.range.min, entryvalrange.range.max);
-            global_rtee_p->Insert(tuplerect_num.min, tuplerect_num.max, sec_indexvalnum);
+          int rtree_id_num = 0;  // 全局索引条目ID（同一SST内部的条目按顺序编号）
+          for (const std::pair<ValueRange, BlockHandle>& entry: filetuple_entries_num) {  // 遍历该SST的所有二级索引条目
+            ValueRange entryvalrange = entry.first;  // 该条目对应的value range（min, max）
+            BlockHandle entryblkhandle_num = entry.second;  // 该条目对应的数据块位置（offset, size）
+            GlobalSecIndexValue sec_indexvalnum(rtree_id_num, filenumber, entryblkhandle_num);  // 构造全局索引值：<条目ID, SST文件号, 块句柄>
+            Rect1D tuplerect_num(entryvalrange.range.min, entryvalrange.range.max);  // 构造1D矩形（就是一个区间[min, max]）
+            global_rtee_p->Insert(tuplerect_num.min, tuplerect_num.max, sec_indexvalnum);  // 【核心】插入到全局R树：RTree<GlobalSecIndexValue, double, 1>
+                                                                                            // 这样查询时可以根据value range快速定位到SST文件和数据块
             rtree_id_num++;
           }
         } else {
@@ -1232,7 +1235,7 @@ class VersionBuilder::Rep {
     // }
 
     return Status::OK();
-  }
+  } // Apply函数结束
 
   // Helper function template for merging the blob file metadata from the base
   // version with the mutable metadata representing the state after applying the

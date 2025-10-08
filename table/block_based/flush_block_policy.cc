@@ -42,14 +42,14 @@ class FlushBlockBySizePolicy : public FlushBlockPolicy {
       return false;
     }
 
-    auto curr_size = data_block_builder_.CurrentSizeEstimate();
+    auto curr_size = data_block_builder_.CurrentSizeEstimate(); // 当前 data block 里已经写入的数据估算大小（字节数）
 
     // Do flush if one of the below two conditions is true:
     // 1) if the current estimated size already exceeds the block size,
     // 2) block_size_deviation is set and the estimated size after appending
     // the kv will exceed the block size and the current size is under the
     // the deviation.
-    return curr_size >= block_size_ || BlockAlmostFull(key, value);
+    return curr_size >= block_size_ || BlockAlmostFull(key, value); // 判断“如果再把当前这条 kv 写进去，会不会超过 block_size_”
   }
 
  private:

@@ -36,7 +36,7 @@ std::string serialize_key(uint64_t iid, double xValue, double yValue) {
 
 std::string serialize_id(int iid) { // int类型的key，如果想让它按整数值大小排序，请确保 key 的序列化使用大端序（big-endian）
     std::string key;  // 但实际上目前是小端序，256  (00 01 00 00)，1  (01 00 00 00)，256 会排在 1 前面
-    key.append(reinterpret_cast<const char*>(&iid), sizeof(int)); 
+    key.append(reinterpret_cast<const char*>(&iid), sizeof(int));
     return key;
 }
 

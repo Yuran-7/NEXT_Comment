@@ -654,7 +654,7 @@ Status DBImpl::Recover(
         *recovered_seq = next_sequence;
       }
       if (!s.ok()) {
-        // Clear memtables if recovery failed
+        // Clear memtables if recovery failed，RecoverLogFiles 失败后，清空所有 column family 的 memtable，重新构建新的空 MemTable
         for (auto cfd : *versions_->GetColumnFamilySet()) {
           cfd->CreateNewMemtable(*cfd->GetLatestMutableCFOptions(),
                                  kMaxSequenceNumber);
@@ -1175,7 +1175,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
           auto iter = version_edits.find(cfd->GetID());
           assert(iter != version_edits.end());
           VersionEdit* edit = &iter->second;
-          status = WriteLevel0TableForRecovery(job_id, cfd, cfd->mem(), edit);
+          status = WriteLevel0TableForRecovery(job_id, cfd, cfd->mem(), edit);  // 即使memtable未满，也会被flush
           if (!status.ok()) {
             // Reflect errors immediately so that conditions like full
             // file-systems cause the DB::Open() to fail.
@@ -1184,7 +1184,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
           flushed = true;
 
           cfd->CreateNewMemtable(*cfd->GetLatestMutableCFOptions(),
-                                 *next_sequence);
+                                 *next_sequence); // 构建一个新的空 MemTable
         }
       }
     }

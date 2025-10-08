@@ -116,7 +116,7 @@ size_t BlockBuilder::EstimateSizeAfterKV(const Slice& key,
   return estimate;
 }
 
-Slice BlockBuilder::Finish() {
+Slice BlockBuilder::Finish() {  // 这个函数完全一致，没有变动
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);

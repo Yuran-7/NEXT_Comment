@@ -489,7 +489,7 @@ struct BlockBasedTableBuilder::Rep {
           table_options));
     }
     if (table_options.create_secondary_index == true) {
-      sec_index_builder.reset(SecondaryIndexBuilder::CreateSecIndexBuilder(
+      sec_index_builder.reset(SecondaryIndexBuilder::CreateSecIndexBuilder( // 创建二级索引构建器
         table_options.sec_index_type, &internal_comparator,
         &this->internal_prefix_transform, use_delta_encoding_for_index_values,
         table_options));
@@ -903,7 +903,7 @@ BlockBasedTableBuilder::BlockBasedTableBuilder(
     sanitized_table_options.format_version = 1;
   }
 
-  rep_ = new Rep(sanitized_table_options, tbo, file);
+  rep_ = new Rep(sanitized_table_options, tbo, file); // 关键
 
   TEST_SYNC_POINT_CALLBACK(
       "BlockBasedTableBuilder::BlockBasedTableBuilder:PreSetupBaseCacheKey",
@@ -924,40 +924,40 @@ BlockBasedTableBuilder::~BlockBasedTableBuilder() {
 }
 
 void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
-  Rep* r = rep_;
-  assert(rep_->state != Rep::State::kClosed);
+  Rep* r = rep_;  // 获取内部表示对象指针
+  assert(rep_->state != Rep::State::kClosed);  // 断言表构建器未关闭
   if (!ok()) return;
-  ValueType value_type = ExtractValueType(key);
-  if (IsValueType(value_type)) {
+  ValueType value_type = ExtractValueType(key);  // 从内部key中提取值类型（插入、删除、合并等）
+  if (IsValueType(value_type)) {  // 如果是普通的值类型（非范围删除）
 #ifndef NDEBUG
-    if (r->props.num_entries > r->props.num_range_deletions) {
-      assert(r->internal_comparator.Compare(key, Slice(r->last_key)) > 0);
+    if (r->props.num_entries > r->props.num_range_deletions) {  // 在调试模式下检查key的有序性
+      assert(r->internal_comparator.Compare(key, Slice(r->last_key)) > 0);  // 确保新key大于上一个key，因为这是从有序的MemTable中添加的
     }
 #endif  // !NDEBUG
 
-    auto should_flush = r->flush_block_policy->Update(key, value);
-    if (should_flush) {
+    auto should_flush = r->flush_block_policy->Update(key, value);  // 是否应该刷新当前数据块
+    if (should_flush) {  // 当前 data block 已经满了，应该把它写出到 SST 文件中
       assert(!r->data_block.empty());
-      r->first_key_in_next_block = &key;
-      Flush();
-      if (r->state == Rep::State::kBuffered) {
-        bool exceeds_buffer_limit =
+      r->first_key_in_next_block = &key;  // 记录下一个块的第一个key
+      Flush();  // 刷新当前数据块到文件
+      if (r->state == Rep::State::kBuffered) {  // 如果处于缓冲状态
+        bool exceeds_buffer_limit =  // 检查是否超过缓冲区限制
             (r->buffer_limit != 0 && r->data_begin_offset > r->buffer_limit);
-        bool exceeds_global_block_cache_limit = false;
+        bool exceeds_global_block_cache_limit = false;  // 初始化全局块缓存限制标志
 
         // Increase cache charging for the last buffered data block
         // only if the block is not going to be unbuffered immediately
         // and there exists a cache reservation manager
-        if (!exceeds_buffer_limit &&
-            r->compression_dict_buffer_cache_res_mgr != nullptr) {
-          Status s =
+        if (!exceeds_buffer_limit &&  // 如果未超过缓冲限制
+            r->compression_dict_buffer_cache_res_mgr != nullptr) {  // 且缓存预留管理器存在
+          Status s =  // 更新缓存预留
               r->compression_dict_buffer_cache_res_mgr->UpdateCacheReservation(
                   r->data_begin_offset);
-          exceeds_global_block_cache_limit = s.IsMemoryLimit();
+          exceeds_global_block_cache_limit = s.IsMemoryLimit();  // 检查是否超过内存限制
         }
 
-        if (exceeds_buffer_limit || exceeds_global_block_cache_limit) {
-          EnterUnbuffered();
+        if (exceeds_buffer_limit || exceeds_global_block_cache_limit) {  // 如果超过任一限制
+          EnterUnbuffered();  // 进入非缓冲状态，完成压缩字典并压缩已缓冲的块
         }
       }
 
@@ -969,71 +969,71 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       // "the r" as the key for the index block entry since it is >= all
       // entries in the first block and < all entries in subsequent
       // blocks.
-      if (ok() && r->state == Rep::State::kUnbuffered) {
-        if (r->IsParallelCompressionEnabled()) {
-          r->pc_rep->curr_block_keys->Clear();
-        } else {
-          r->index_builder->AddIndexEntry(&r->last_key, &key,
+      if (ok() && r->state == Rep::State::kUnbuffered) {  // 如果状态正常且处于非缓冲状态
+        if (r->IsParallelCompressionEnabled()) {  // 如果启用了并行压缩
+          r->pc_rep->curr_block_keys->Clear();  // 清空当前块的键列表
+        } else {  // 否则立即添加索引条目
+          r->index_builder->AddIndexEntry(&r->last_key, &key,  // 如果要刷盘
                                           r->pending_handle);
-          if (r->table_options.create_secondary_index) {
-            r->sec_index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);
+          if (r->table_options.create_secondary_index) {  // 如果需要创建辅助索引
+            r->sec_index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);  // 如果要刷盘
           }
         }
       }
-    }
+    } // if (should_flush)
 
     // Note: PartitionedFilterBlockBuilder requires key being added to filter
     // builder after being added to index builder.
-    if (r->state == Rep::State::kUnbuffered) {
-      if (r->IsParallelCompressionEnabled()) {
-        r->pc_rep->curr_block_keys->PushBack(key);
-      } else {
-        if (r->filter_builder != nullptr) {
-          size_t ts_sz =
+    if (r->state == Rep::State::kUnbuffered) {  // 如果处于非缓冲状态
+      if (r->IsParallelCompressionEnabled()) {  // 如果启用了并行压缩
+        r->pc_rep->curr_block_keys->PushBack(key);  // 将key添加到当前块的键列表
+      } else {  // 否则直接添加到过滤器
+        if (r->filter_builder != nullptr) {  // 如果过滤器构建器存在
+          size_t ts_sz =  // 获取时间戳大小
               r->internal_comparator.user_comparator()->timestamp_size();
-          r->filter_builder->Add(ExtractUserKeyAndStripTimestamp(key, ts_sz));
+          r->filter_builder->Add(ExtractUserKeyAndStripTimestamp(key, ts_sz));  // 添加用户key到过滤器（去除时间戳）
         }
       }
     }
 
-    r->data_block.AddWithLastKey(key, value, r->last_key);
-    r->last_key.assign(key.data(), key.size());
-    if (r->state == Rep::State::kBuffered) {
+    r->data_block.AddWithLastKey(key, value, r->last_key);  // 将键值对添加到当前数据块中
+    r->last_key.assign(key.data(), key.size());  // 更新last_key为当前key
+    if (r->state == Rep::State::kBuffered) {  // 如果处于缓冲状态
       // Buffered keys will be replayed from data_block_buffers during
       // `Finish()` once compression dictionary has been finalized.
-    } else {
-      if (!r->IsParallelCompressionEnabled()) {
-        r->index_builder->OnKeyAdded(key);
-        if (r->table_options.create_secondary_index) {
-          r->sec_index_builder->OnKeyAdded(value);
+    } else {  // 如果处于非缓冲状态
+      if (!r->IsParallelCompressionEnabled()) {  // 如果未启用并行压缩
+        r->index_builder->OnKeyAdded(key);  // 不刷盘也要执行
+        if (r->table_options.create_secondary_index) {  // 如果需要创建辅助索引
+          r->sec_index_builder->OnKeyAdded(value);  // 不刷盘也要执行
         }
       }
     }
     // TODO offset passed in is not accurate for parallel compression case
-    NotifyCollectTableCollectorsOnAdd(key, value, r->get_offset(),
+    NotifyCollectTableCollectorsOnAdd(key, value, r->get_offset(),  // 通知表属性收集器有新数据添加
                                       r->table_properties_collectors,
                                       r->ioptions.logger);
 
-  } else if (value_type == kTypeRangeDeletion) {
-    r->range_del_block.Add(key, value);
+  } else if (value_type == kTypeRangeDeletion) {  // 如果是范围删除类型
+    r->range_del_block.Add(key, value);  // 将范围删除条目添加到范围删除块
     // TODO offset passed in is not accurate for parallel compression case
-    NotifyCollectTableCollectorsOnAdd(key, value, r->get_offset(),
+    NotifyCollectTableCollectorsOnAdd(key, value, r->get_offset(),  // 通知表属性收集器
                                       r->table_properties_collectors,
                                       r->ioptions.logger);
-  } else {
-    assert(false);
+  } else {  // 其他未知类型
+    assert(false);  // 断言失败，不应该到达这里
   }
 
-  r->props.num_entries++;
-  r->props.raw_key_size += key.size();
-  r->props.raw_value_size += value.size();
-  if (value_type == kTypeDeletion || value_type == kTypeSingleDeletion) {
-    r->props.num_deletions++;
-  } else if (value_type == kTypeRangeDeletion) {
-    r->props.num_deletions++;
-    r->props.num_range_deletions++;
-  } else if (value_type == kTypeMerge) {
-    r->props.num_merge_operands++;
+  r->props.num_entries++;  // 增加总条目计数
+  r->props.raw_key_size += key.size();  // 累加原始key的总大小
+  r->props.raw_value_size += value.size();  // 累加原始value的总大小
+  if (value_type == kTypeDeletion || value_type == kTypeSingleDeletion) {  // 如果是删除或单个删除操作
+    r->props.num_deletions++;  // 增加删除计数
+  } else if (value_type == kTypeRangeDeletion) {  // 如果是范围删除
+    r->props.num_deletions++;  // 增加删除计数
+    r->props.num_range_deletions++;  // 增加范围删除计数
+  } else if (value_type == kTypeMerge) {  // 如果是合并操作
+    r->props.num_merge_operands++;  // 增加合并操作数计数
   }
 }
 
@@ -1246,7 +1246,7 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
                                            CompressionType type,
                                            BlockHandle* handle,
                                            BlockType block_type,
-                                           const Slice* raw_block_contents) {
+                                           const Slice* raw_block_contents) { // 新增的函数
   Rep* r = rep_;
   bool is_data_block = block_type == BlockType::kData;
   StopWatch sw(r->ioptions.clock, r->ioptions.stats, WRITE_RAW_BLOCK_MICROS);
@@ -1618,7 +1618,7 @@ void BlockBasedTableBuilder::WriteIndexBlock(
     return;
   }
   IndexBuilder::IndexBlocks index_blocks;
-  auto index_builder_status = rep_->index_builder->Finish(&index_blocks);
+  auto index_builder_status = rep_->index_builder->Finish(&index_blocks); // 这里应该是定义在index_builder.h中的Finish函数
   if (index_builder_status.IsIncomplete()) {
     // We we have more than one index partition then meta_blocks are not
     // supported for the index. Currently meta_blocks are used only by
@@ -1628,7 +1628,7 @@ void BlockBasedTableBuilder::WriteIndexBlock(
     rep_->SetStatus(index_builder_status);
   }
   if (ok()) {
-    for (const auto& item : index_blocks.meta_blocks) {
+    for (const auto& item : index_blocks.meta_blocks) { // BinarySearch（ShortenedIndexBuilder）不会进入这个for
       BlockHandle block_handle;
       WriteBlock(item.second, &block_handle, BlockType::kIndex);
       if (!ok()) {
@@ -1638,7 +1638,7 @@ void BlockBasedTableBuilder::WriteIndexBlock(
     }
   }
   if (ok()) {
-    if (rep_->table_options.enable_index_compression) {
+    if (rep_->table_options.enable_index_compression) { // 进入
       WriteBlock(index_blocks.index_block_contents, index_block_handle,
                  BlockType::kIndex);
     } else {
@@ -1647,7 +1647,7 @@ void BlockBasedTableBuilder::WriteIndexBlock(
     }
   }
   // If there are more index partitions, finish them and write them out
-  if (index_builder_status.IsIncomplete()) {
+  if (index_builder_status.IsIncomplete()) {  // BinarySearch（ShortenedIndexBuilder）不会进入这个if
     bool index_building_finished = false;
     while (ok() && !index_building_finished) {
       Status s =
@@ -1685,78 +1685,90 @@ void BlockBasedTableBuilder::WriteIndexBlock(
   }
 }
 
+// 参数：meta_index_builder - 元数据索引构建器，用于记录各个块在文件中的位置
 void BlockBasedTableBuilder::WriteSecIndexBlock(
-    MetaIndexBuilder* meta_index_builder) {
+  MetaIndexBuilder* meta_index_builder) {
   if (!ok()) {
     return;
   }
-  // std::cout << "enter writesecindexblock" << std::endl;
+  
   if (rep_->table_options.create_secondary_index == true) {
     SecondaryIndexBuilder::IndexBlocks sec_index_blocks; 
     BlockHandle sec_index_block_handle;
+    
+    // 调用Finish函数完成索引构建，将内存中的索引数据序列化为可写入磁盘的格式
     auto sec_index_builder_status = rep_->sec_index_builder->Finish(&sec_index_blocks);
-    if (sec_index_builder_status.IsIncomplete()) {
-      // We we have more than one index partition then meta_blocks are not
-      // supported for the index. Currently meta_blocks are used only by
-      // HashIndexBuilder which is not multi-partition.
+    
+    // 处理分区索引的情况（当索引过大时会分成多个分区）
+    if (sec_index_builder_status.IsIncomplete()) {  // 进入 
       assert(sec_index_blocks.meta_blocks.empty());
     } else if (ok() && !sec_index_builder_status.ok()) {
+      // 如果Finish失败，记录错误状态
       rep_->SetStatus(sec_index_builder_status);
     }
+    
+    // 第一步：写入元数据块（如果有）
     if (ok()) {
-      // std::cout << "ok before write block" << std::endl;
-      for (const auto& item : sec_index_blocks.meta_blocks) {
+      for (const auto& item : sec_index_blocks.meta_blocks) { // 不进入
         BlockHandle block_handle;
+        // 将元数据块写入文件，并获取其在文件中的位置
         WriteBlock(item.second, &block_handle, BlockType::kIndex);
         if (!ok()) {
           break;
         }
-        // std::cout << "Meta_index_builder Sec Index Block item.first: " << item.first << std::endl;
         meta_index_builder->Add(item.first, block_handle);
       }
     }
+    
+    // 第二步：写入主辅助索引块
     if (ok()) {
-      // std::cout << "before write raw block" << std::endl;
-      // secondary index does not support parallel compression at this state
       WriteRawBlock(sec_index_blocks.index_block_contents, kNoCompression,
-                      &sec_index_block_handle, BlockType::kIndex);
+                      &sec_index_block_handle, BlockType::kIndex);  // 会获取sec_index_block_handle，并把sec_index_blocks.index_block_contents写入磁盘
     }
-    // If there are more index partitions, finish them and write them out
-    if (sec_index_builder_status.IsIncomplete()) {
+    
+    // 第三步：处理分区索引（如果索引被分成了多个分区）
+    if (sec_index_builder_status.IsIncomplete()) {  // 进入
       bool sec_index_building_finished = false;
+      // 循环处理所有索引分区
       while (ok() && !sec_index_building_finished) {
+        // 继续完成剩余的索引分区
         Status s =
             rep_->sec_index_builder->Finish(&sec_index_blocks, sec_index_block_handle);
         if (s.ok()) {
+          // 所有分区已完成
           sec_index_building_finished = true;
-        } else if (s.IsIncomplete()) {
-          // More partitioned index after this one
+        } else if (s.IsIncomplete()) {  // 会很多次进入这个分支
+          // 还有更多分区需要处理
           assert(!sec_index_building_finished);
         } else {
-          // Error
+          // 发生错误
           rep_->SetStatus(s);
           return;
         }
 
-        // Secondary index does not support parallel compression 
+        // 将当前分区写入文件（不支持并行压缩）
         WriteRawBlock(sec_index_blocks.index_block_contents, kNoCompression,
                         &sec_index_block_handle, BlockType::kIndex);
         
-        // The last index_block_handle will be for the partition index block
+        // 最后一个index_block_handle将用于分区索引块
       }
+      
+      // 写入分区相关的元数据块
       if (ok()) {
         for (const auto& item : sec_index_blocks.meta_blocks) {
           BlockHandle block_handle;
+          // 写入元数据块并记录位置
           WriteBlock(item.second, &block_handle, BlockType::kIndex);
           if (!ok()) {
             break;
           }
-          // std::cout << "Meta_index_builder Sec Index Block item.first: " << item.first << std::endl;
+          // 将元数据块信息添加到元索引中
           meta_index_builder->Add(item.first, block_handle);
         }
       }
+      
+      // 将辅助索引块的顶层位置信息添加到元索引
       std::string sec_index_blk_name = "rocksdb.SecondaryIndexBlock";
-      // std::cout << "meta_index_builder added" << std::endl;
       meta_index_builder->Add(sec_index_blk_name, sec_index_block_handle);
     }
   }

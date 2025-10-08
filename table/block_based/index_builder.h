@@ -83,7 +83,7 @@ class IndexBuilder {
     // Throw away the changes to last_partition_block_handle. It has no effect
     // on the first call to Finish anyway.
     BlockHandle last_partition_block_handle;
-    return Finish(index_blocks, last_partition_block_handle);
+    return Finish(index_blocks, last_partition_block_handle); // 在283行
   }
 
   // This override of Finish can be utilized to build the 2nd level index in
@@ -232,52 +232,52 @@ class ShortenedIndexBuilder : public IndexBuilder {
     }
   }
 
-  virtual void AddIndexEntry(std::string* last_key_in_current_block,
-                             const Slice* first_key_in_next_block,
+  virtual void AddIndexEntry(std::string* last_key_in_current_block,  // 向索引块添加新的索引条目
+                             const Slice* first_key_in_next_block,  // 参数：当前块最后一个key、下一个块第一个key、数据块位置信息
                              const BlockHandle& block_handle) override {
-    if (first_key_in_next_block != nullptr) {
-      if (shortening_mode_ !=
+    if (first_key_in_next_block != nullptr) {  // 如果存在下一个数据块
+      if (shortening_mode_ !=  // 如果启用了键缩短模式
           BlockBasedTableOptions::IndexShorteningMode::kNoShortening) {
-        FindShortestInternalKeySeparator(*comparator_->user_comparator(),
+        FindShortestInternalKeySeparator(*comparator_->user_comparator(),  // 查找最短的分隔键（例如："the quick brown fox" 和 "the who" -> "the r"）
                                          last_key_in_current_block,
-                                         *first_key_in_next_block);
+                                         *first_key_in_next_block); // 生成的分隔键会直接修改传入的参数 last_key_in_current_block
       }
-      if (!seperator_is_key_plus_seq_ &&
-          comparator_->user_comparator()->Compare(
+      if (!seperator_is_key_plus_seq_ &&  // 检查分隔符是否需要包含序列号
+          comparator_->user_comparator()->Compare(  // 如果用户键相同
               ExtractUserKey(*last_key_in_current_block),
               ExtractUserKey(*first_key_in_next_block)) == 0) {
-        seperator_is_key_plus_seq_ = true;
+        seperator_is_key_plus_seq_ = true;  // 则分隔符必须包含序列号来区分
       }
-    } else {
-      if (shortening_mode_ == BlockBasedTableOptions::IndexShorteningMode::
+    } else {  // 如果这是最后一个数据块
+      if (shortening_mode_ == BlockBasedTableOptions::IndexShorteningMode::  // 如果允许缩短分隔符和后继键
                                   kShortenSeparatorsAndSuccessor) {
-        FindShortInternalKeySuccessor(*comparator_->user_comparator(),
+        FindShortInternalKeySuccessor(*comparator_->user_comparator(),  // 查找最短的后继键
                                       last_key_in_current_block);
       }
     }
-    auto sep = Slice(*last_key_in_current_block);
+    auto sep = Slice(*last_key_in_current_block);  // 获取处理后的分隔键
 
-    assert(!include_first_key_ || !current_block_first_internal_key_.empty());
-    IndexValue entry(block_handle, current_block_first_internal_key_);
-    std::string encoded_entry;
-    std::string delta_encoded_entry;
-    entry.EncodeTo(&encoded_entry, include_first_key_, nullptr);
-    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {
-      entry.EncodeTo(&delta_encoded_entry, include_first_key_,
+    assert(!include_first_key_ || !current_block_first_internal_key_.empty());  // 断言：如果需要包含首键，则首键不能为空
+    IndexValue entry(block_handle, current_block_first_internal_key_);  // 创建索引值（包含块句柄和首键）
+    std::string encoded_entry;  // 完整编码的条目
+    std::string delta_encoded_entry;  // 增量编码的条目
+    entry.EncodeTo(&encoded_entry, include_first_key_, nullptr);  // 编码索引值（完整编码）
+    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {  // 如果启用增量编码且存在上一个句柄
+      entry.EncodeTo(&delta_encoded_entry, include_first_key_,  // 使用增量编码（只存储与上一个句柄的差异）
                      &last_encoded_handle_);
-    } else {
+    } else {  // 否则（第一个块或禁用增量编码）
       // If it's the first block, or delta encoding is disabled,
       // BlockBuilder::Add() below won't use delta-encoded slice.
     }
-    last_encoded_handle_ = block_handle;
-    const Slice delta_encoded_entry_slice(delta_encoded_entry);
-    index_block_builder_.Add(sep, encoded_entry, &delta_encoded_entry_slice);
-    if (!seperator_is_key_plus_seq_) {
-      index_block_builder_without_seq_.Add(ExtractUserKey(sep), encoded_entry,
+    last_encoded_handle_ = block_handle;  // 更新上一个块句柄，供下次增量编码使用
+    const Slice delta_encoded_entry_slice(delta_encoded_entry);  // 创建增量编码切片
+    index_block_builder_.Add(sep, encoded_entry, &delta_encoded_entry_slice);  // 将索引条目添加到索引块构建器（包含序列号版本）
+    if (!seperator_is_key_plus_seq_) {  // 如果分隔符不需要序列号
+      index_block_builder_without_seq_.Add(ExtractUserKey(sep), encoded_entry,  // 同时添加到无序列号的索引块构建器（只用用户键）
                                            &delta_encoded_entry_slice);
     }
 
-    current_block_first_internal_key_.clear();
+    current_block_first_internal_key_.clear();  // 清空当前块首键，准备处理下一个块
   }
 
   using IndexBuilder::Finish;
@@ -288,7 +288,7 @@ class ShortenedIndexBuilder : public IndexBuilder {
       index_blocks->index_block_contents = index_block_builder_.Finish();
     } else {
       index_blocks->index_block_contents =
-          index_block_builder_without_seq_.Finish();
+          index_block_builder_without_seq_.Finish();  // table/block_based/block_builder.cc
     }
     index_size_ = index_blocks->index_block_contents.size();
     return Status::OK();
@@ -466,7 +466,7 @@ class PartitionedIndexBuilder : public IndexBuilder {
   static PartitionedIndexBuilder* CreateIndexBuilder(
       const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
       const bool use_value_delta_encoding,
-      const BlockBasedTableOptions& table_opt);
+      const BlockBasedTableOptions& table_opt); // 在index_builder.cc中定义
 
   explicit PartitionedIndexBuilder(const InternalKeyComparator* comparator,
                                    const BlockBasedTableOptions& table_opt,
@@ -675,7 +675,7 @@ class RtreeIndexLevelBuilder : public IndexBuilder {
 };
 
 
-class RtreeIndexBuilder : public IndexBuilder {
+class RtreeIndexBuilder : public IndexBuilder { // 这个属于对key做的索引，和kBinarySearch、kHashSearch同一级别
  public:
   static RtreeIndexBuilder* CreateIndexBuilder(
       const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
@@ -1095,7 +1095,7 @@ class OneDRtreeSecondaryIndexLevelBuilder : public SecondaryIndexBuilder {
   }
 
   virtual void AddIndexEntry(const BlockHandle& block_handle,
-                             std::string enclosing_valrange_string) {
+                             std::string enclosing_valrange_string) { // AddIdxEntry函数内调用sub_index_builder_->AddIndexEntry
     // Encode the block handle and construct leaf node
     // std::string handle_encoding;
     // block_handle.EncodeTo(&handle_encoding);
@@ -1106,7 +1106,7 @@ class OneDRtreeSecondaryIndexLevelBuilder : public SecondaryIndexBuilder {
     std::string encoded_entry;
     std::string delta_encoded_entry;
     entry.EncodeTo(&encoded_entry, include_first_key_, nullptr);
-    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {
+    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {  // 不进入
       entry.EncodeTo(&delta_encoded_entry, include_first_key_,
                      &last_encoded_handle_);
     } else {
@@ -1115,7 +1115,7 @@ class OneDRtreeSecondaryIndexLevelBuilder : public SecondaryIndexBuilder {
     }
     last_encoded_handle_ = block_handle;
     const Slice delta_encoded_entry_slice(delta_encoded_entry);
-    index_block_builder_.Add(Slice(enclosing_valrange_string), encoded_entry, &delta_encoded_entry_slice);
+    index_block_builder_.Add(Slice(enclosing_valrange_string), encoded_entry, &delta_encoded_entry_slice);  // 往buffer_中写入条目，key是[min, max]，value是编码后的IndexValue
 
     enclosing_valrange_.clear();
   }
@@ -1259,9 +1259,9 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   bool cut_filter_block = false;
   BlockHandle last_encoded_handle_;
   ValueRange sub_index_enclosing_valrange_;
-  ValueRange enclosing_valrange_;
+  ValueRange enclosing_valrange_; // 粗粒度（整个子索引块的总范围）
   ValueRange sec_enclosing_valrange_;
-  std::vector<std::string> sec_valranges_;
+  std::vector<std::string> sec_valranges_;  // 细粒度（满足条件下，子索引块内部的多个小范围）
   ValueRange temp_sec_valrange_;
   uint32_t rtree_level_;
   std::string rtree_height_str_;

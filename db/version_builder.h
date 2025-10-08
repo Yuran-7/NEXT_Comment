@@ -54,7 +54,7 @@ class VersionBuilder {
   uint64_t GetMinOldestBlobFileNumber() const;
 
  private:
-  class Rep;
+  class Rep;  // 类内的前向声明
   std::unique_ptr<Rep> rep_;
 };
 

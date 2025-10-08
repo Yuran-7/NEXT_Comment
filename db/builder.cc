@@ -211,7 +211,7 @@ Status BuildTable(
     for (; c_iter.Valid(); c_iter.Next()) {
       const Slice& key = c_iter.key();
       const Slice& value = c_iter.value();
-      const ParsedInternalKey& ikey = c_iter.ikey();
+      const ParsedInternalKey& ikey = c_iter.ikey();  // 相当于反序列化了
       // Generate a rolling 64-bit hash of the key and values
       // Note :
       // Here "key" integrates 'sequence_number'+'kType'+'user key'.
@@ -241,7 +241,7 @@ Status BuildTable(
 
     if (s.ok()) {
       auto range_del_it = range_del_agg->NewIterator();
-      for (range_del_it->SeekToFirst(); range_del_it->Valid();
+      for (range_del_it->SeekToFirst(); range_del_it->Valid();  // 不进入循环
            range_del_it->Next()) {
         auto tombstone = range_del_it->Tombstone();
         auto kv = tombstone.Serialize();
@@ -273,8 +273,8 @@ Status BuildTable(
       s = builder->Finish();
 
       std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
-      builder->GetSecondaryEntries(&secondary_index_entries);
-      s = meta->UpdateSecEntries(secondary_index_entries);
+      builder->GetSecondaryEntries(&secondary_index_entries); // 最终获取OneDRtreeSecondaryIndexBuilder成员变量sec_entries_
+      s = meta->UpdateSecEntries(secondary_index_entries);  // 将secondary_index_entries赋值给FileMetaData的成员变量SecValrange和SecondaryEntries
       secondary_index_entries.clear();
     }
     if (io_status->ok()) {
