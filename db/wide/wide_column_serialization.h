@@ -16,16 +16,17 @@ namespace ROCKSDB_NAMESPACE {
 
 class Slice;
 
-// Wide-column serialization/deserialization primitives.
+// Wide-column serialization/deserialization primitives 原语.
 //
 // The two main parts of the layout are 1) a sorted index containing the column
 // names and column value sizes and 2) the column values themselves. Keeping the
 // index and the values separate will enable selectively reading column values
 // down the line. Note that currently the index has to be fully parsed in order
-// to find out the offset of each column value.
+// to find out the offset of each column value. 宽列序列化格式要求“列名”必须是按字典序排序的
 //
-// Legend: cn = column name, cv = column value, cns = column name size, cvs =
-// column value size.
+// Legend: cn = column name, cns = column name size, 
+// cvs = column value size , cv = column value.
+// cn, cns, cvs作为一个元组，多个元组组成索引区，多个cv组成值区
 //
 //      +----------+--------------+----------+-------+----------+---...
 //      | version  | # of columns |  cns 1   | cn 1  |  cvs 1   |

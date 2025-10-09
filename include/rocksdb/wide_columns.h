@@ -100,7 +100,7 @@ class PinnableWideColumns {
   void CreateIndexForPlainValue();
   Status CreateIndexForWideColumns();
 
-  PinnableSlice value_;
+  PinnableSlice value_; // 定义在include/rocksdb/slice.h
   WideColumns columns_;
 };
 

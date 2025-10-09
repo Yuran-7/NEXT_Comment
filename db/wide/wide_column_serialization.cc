@@ -39,7 +39,7 @@ Status WideColumnSerialization::Serialize(const WideColumns& columns,
       return Status::InvalidArgument("Wide column name too long");
     }
     if (i > 0 && columns[i - 1].name().compare(name) >= 0) {
-      return Status::Corruption("Wide columns out of order");
+      return Status::Corruption("Wide columns out of order"); // 宽列序列化格式要求“列名”必须是按字典序排序的，严格递增
     }
 
     const Slice& value = column.value();
@@ -66,7 +66,7 @@ Status WideColumnSerialization::Deserialize(Slice& input,
   assert(columns.empty());
 
   uint32_t version = 0;
-  if (!GetVarint32(&input, &version)) {
+  if (!GetVarint32(&input, &version)) { // util/coding.h
     return Status::Corruption("Error decoding wide column version");
   }
 
@@ -85,7 +85,7 @@ Status WideColumnSerialization::Deserialize(Slice& input,
 
   columns.reserve(num_columns);
 
-  autovector<uint32_t, 16> column_value_sizes;
+  autovector<uint32_t, 16> column_value_sizes;  // 最多 16 个元素的空间作为“内联容量”(inline capacity)，只有当元素数量超过 16 时才会退化成使用堆分配（类似 std::vector 的动态扩容）
   column_value_sizes.reserve(num_columns);
 
   for (uint32_t i = 0; i < num_columns; ++i) {
@@ -98,14 +98,14 @@ Status WideColumnSerialization::Deserialize(Slice& input,
       return Status::Corruption("Wide columns out of order");
     }
 
-    columns.emplace_back(name, Slice());
+    columns.emplace_back(name, Slice());  // 此时只得到了列名，列值还没有
 
     uint32_t value_size = 0;
     if (!GetVarint32(&input, &value_size)) {
       return Status::Corruption("Error decoding wide column value size");
     }
 
-    column_value_sizes.emplace_back(value_size);
+    column_value_sizes.emplace_back(value_size);  // 把value_size先存起来，后面再用
   }
 
   const Slice data(input);
@@ -132,7 +132,7 @@ WideColumns::const_iterator WideColumnSerialization::Find(
       std::lower_bound(columns.cbegin(), columns.cend(), column_name,
                        [](const WideColumn& lhs, const Slice& rhs) {
                          return lhs.name().compare(rhs) < 0;
-                       });
+                       });  // 在有序的 columns 数组中，用二分查找找到第一个列名 >= column_name 的位置
 
   if (it == columns.cend() || it->name() != column_name) {
     return columns.cend();
@@ -145,7 +145,7 @@ Status WideColumnSerialization::GetValueOfDefaultColumn(Slice& input,
                                                         Slice& value) {
   WideColumns columns;
 
-  const Status s = Deserialize(input, columns);
+  const Status s = Deserialize(input, columns); // 经历了完整的反序列化过程
   if (!s.ok()) {
     return s;
   }

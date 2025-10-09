@@ -271,11 +271,12 @@ Status BuildTable(
               ? meta->file_creation_time
               : meta->oldest_ancester_time);
       s = builder->Finish();
-
-      std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
-      builder->GetSecondaryEntries(&secondary_index_entries); // 最终获取OneDRtreeSecondaryIndexBuilder成员变量sec_entries_
-      s = meta->UpdateSecEntries(secondary_index_entries);  // 将secondary_index_entries赋值给FileMetaData的成员变量SecValrange和SecondaryEntries
-      secondary_index_entries.clear();
+      if (tboptions.ioptions.global_sec_index) {
+        std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
+        builder->GetSecondaryEntries(&secondary_index_entries); // 最终获取OneDRtreeSecondaryIndexBuilder成员变量sec_entries_
+        s = meta->UpdateSecEntries(secondary_index_entries);  // 将secondary_index_entries赋值给FileMetaData的成员变量SecValrange和SecondaryEntries
+        secondary_index_entries.clear();
+      }
     }
     if (io_status->ok()) {
       *io_status = builder->io_status();

@@ -175,7 +175,6 @@ int main(int argc, char* argv[]) {
     // For per file secondary index in SST file
     block_based_options.create_secondary_index = true;
     block_based_options.create_sec_index_reader = true;
-    
     // For global secondary index in memory
     options.create_global_sec_index = true;
 

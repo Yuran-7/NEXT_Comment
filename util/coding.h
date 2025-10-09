@@ -155,9 +155,9 @@ inline void PutFixed64(std::string* dst, uint64_t value) {
 }
 
 inline void PutVarint32(std::string* dst, uint32_t v) {
-  char buf[5];
-  char* ptr = EncodeVarint32(buf, v);
-  dst->append(buf, static_cast<size_t>(ptr - buf));
+  char buf[5];  // 准备一个临时缓冲区，最多 5 个字节，因为 32 位整数的 Varint 最多需要 5 字节
+  char* ptr = EncodeVarint32(buf, v); // 返回值 ptr 是写完之后的下一个位置
+  dst->append(buf, static_cast<size_t>(ptr - buf)); // 把这段编码好的字节追加到目标字符串 dst 末尾
 }
 
 inline void PutVarint32Varint32(std::string* dst, uint32_t v1, uint32_t v2) {
@@ -289,11 +289,11 @@ inline bool GetFixed16(Slice* input, uint16_t* value) {
 inline bool GetVarint32(Slice* input, uint32_t* value) {
   const char* p = input->data();
   const char* limit = p + input->size();
-  const char* q = GetVarint32Ptr(p, limit, value);
+  const char* q = GetVarint32Ptr(p, limit, value);  // 从 input 开头读取一个 Varint32 整数（可变长度整数），并把这个整数的值放到 *value 中，q指向下一个未读取的字节
   if (q == nullptr) {
     return false;
   } else {
-    *input = Slice(q, static_cast<size_t>(limit - q));
+    *input = Slice(q, static_cast<size_t>(limit - q));  // input变短
     return true;
   }
 }

@@ -40,12 +40,12 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
 Status DBImpl::PutEntity(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key,
                          const WideColumns& columns) {
-  const Status s = FailIfCfHasTs(column_family);
+  const Status s = FailIfCfHasTs(column_family);  // 定义在db/db_impl/db_impl.h，检查指定的 Column Family（列族）是否启用了时间戳（Timestamp）功能，如果启用了，则返回一个表示“失败/错误”的 Status，否则返回 Status::OK()
   if (!s.ok()) {
     return s;
   }
 
-  return DB::PutEntity(options, column_family, key, columns);
+  return DB::PutEntity(options, column_family, key, columns); // 2276行
 }
 
 Status DBImpl::Merge(const WriteOptions& o, ColumnFamilyHandle* column_family,
@@ -2291,7 +2291,7 @@ Status DB::PutEntity(const WriteOptions& options,
     return s;
   }
 
-  return Write(options, &batch);
+  return Write(options, &batch);  // 这个和普通的Put调用的是同一个Write接口
 }
 
 Status DB::Delete(const WriteOptions& opt, ColumnFamilyHandle* column_family,

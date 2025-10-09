@@ -15,3 +15,5 @@ bplustree/bplustree_insert
 bplustree/bplustree_query
 bplustree/global_bptree
 rtree/rtree_insert
+widedb
+wide_column/wide_columns_demo

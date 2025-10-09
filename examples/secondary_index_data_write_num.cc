@@ -165,17 +165,17 @@ int main(int argc, char* argv[]) {
     BlockBasedTableOptions block_based_options;
 
     // For per file secondary index in SST file
-    block_based_options.create_secondary_index = true;
-    block_based_options.create_sec_index_reader = true;
+    block_based_options.create_secondary_index = true;    // 声明在include/rocksdb/table.h，默认false，主要使用在table/block_based/block_based_table_builder.cc
+    block_based_options.create_sec_index_reader = true;  // 用在table/block_based/block_based_table_builder.cc，PrefetchIndexAndFilterBlocks函数
     block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // 默认是 kRtreeSec
     
     // For global secondary index in memory
-    options.create_global_sec_index = true; // include/rocksdb/advanced_options.h
+    options.create_global_sec_index = true;  // 初始化options/cf_options.cc下的ImmutableCFOptions的global_sec_index
     // To indicate the index attribute type
     options.global_sec_index_is_spatial = false;  // 默认是true
 
-    options.table_factory.reset(NewBlockBasedTableFactory(block_based_options));
-    options.memtable_factory.reset(new rocksdb::SkipListSecFactory);
+    options.table_factory.reset(NewBlockBasedTableFactory(block_based_options));      // NewBlockBasedTableFactory声明在include/rocksdb/table.h，定义在table/block_based/block_based_table_factory.cc
+    options.memtable_factory.reset(new rocksdb::SkipListSecFactory);    // SkipListSecFactory继承MemTableRepFactory
     
     options.allow_concurrent_memtable_write = false;  // 同一时间只有一个线程可以写入 MemTable
 
@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total data size: " << (totalKeySize + totalValueSize) / 1024.0 / 1024.0 << " MB" << std::endl;
         std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
 
-        sleep(5);
+        sleep(5);    // 秒
 
         db->Close();
 

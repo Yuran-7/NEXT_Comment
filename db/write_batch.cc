@@ -942,10 +942,10 @@ Status WriteBatchInternal::PutEntity(WriteBatch* b, uint32_t column_family_id,
   std::sort(sorted_columns.begin(), sorted_columns.end(),
             [](const WideColumn& lhs, const WideColumn& rhs) {
               return lhs.name().compare(rhs.name()) < 0;
-            });
+            }); // 已经帮助排序好了
 
   std::string entity;
-  const Status s = WideColumnSerialization::Serialize(sorted_columns, entity);
+  const Status s = WideColumnSerialization::Serialize(sorted_columns, entity);  // 静态函数
   if (!s.ok()) {
     return s;
   }
@@ -958,10 +958,10 @@ Status WriteBatchInternal::PutEntity(WriteBatch* b, uint32_t column_family_id,
 
   WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
 
-  if (column_family_id == 0) {
+  if (column_family_id == 0) {  // true
     b->rep_.push_back(static_cast<char>(kTypeWideColumnEntity));
   } else {
-    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyWideColumnEntity));
+    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyWideColumnEntity));  // rep_是string
     PutVarint32(&b->rep_, column_family_id);
   }
 
