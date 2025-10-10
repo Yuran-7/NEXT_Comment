@@ -15,6 +15,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/table.h"
+#include "rocksdb/wide_columns.h"
 #include "util/coding.h"
 #include "util/rtree.h"
 #include "util/hilbert_curve.h"
@@ -187,11 +188,14 @@ int main(int argc, char* argv[]) {
     options.bottommost_compression = rocksdb::kNoCompression;
 
     Status s;
-
+    
+    // CSV schema:
+    // id,area,min_lon,min_lat,max_lon,max_lat,geom,tags
     int id;
-    double perimeter;
-    uint32_t op;
-    double low[2], high[2];
+    double area;
+    double min_lon, min_lat, max_lon, max_lat;
+    std::string geom;
+    std::string tags;
 
     // Failed to open, probably it doesn't exist yet. Try to create it and
     // insert data
@@ -209,49 +213,117 @@ int main(int argc, char* argv[]) {
         std::cout << "Create if missing: " << s.ToString() << std::endl;
         assert(s.ok());
 
-        std::cout << "start writing data" << std::endl;
+        std::cout << "start writing data (CSV with header: id,area,min_lon,min_lat,max_lon,max_lat,geom,tags)" << std::endl;
         // auto totalDuration = std::chrono::duration<long long, std::milli>(0);
         std::chrono::nanoseconds totalDuration{0};
 
         std::string line;
         int lineCount = 0;
         size_t totalKeySize = 0;
-        size_t totalValueSize = 0;
-        while(std::getline(dataFile, line)) {
+        size_t totalEntityValuesSize = 0; // sum of column values sizes
+
+        // Helper: simple CSV parser supporting commas inside double quotes
+        auto parse_csv = [](const std::string& input) {
+            std::vector<std::string> fields;
+            std::string cur;
+            bool in_quotes = false;
+            for (size_t i = 0; i < input.size(); ++i) {
+                char c = input[i];
+                if (c == '"') {
+                    if (in_quotes && i + 1 < input.size() && input[i + 1] == '"') {
+                        // Escaped quote
+                        cur.push_back('"');
+                        ++i;
+                    } else {
+                        in_quotes = !in_quotes;
+                    }
+                } else if (c == ',' && !in_quotes) {
+                    fields.emplace_back(std::move(cur));
+                    cur.clear();
+                } else {
+                    cur.push_back(c);
+                }
+            }
+            fields.emplace_back(std::move(cur));
+            // Trim trailing CR from last field if present (Windows line endings)
+            if (!fields.empty() && !fields.back().empty() && fields.back().back() == '\r') {
+                fields.back().pop_back();
+            }
+            return fields;
+        };
+
+        // Read and discard the header line if present
+        if (std::getline(dataFile, line)) {
+            auto header = parse_csv(line);
+            // If the first column isn't numeric header, assume it's a header row; otherwise treat as data
+            if (!(header.size() >= 1 && (header[0] == "id" || header[0] == "ID"))) {
+                // This was actually a data row; process it below by pushing back into a buffer
+                dataFile.seekg(0); // rewind to beginning if no header
+            }
+        }
+
+        ColumnFamilyHandle* default_cf = nullptr;
+        default_cf = db->DefaultColumnFamily();
+
+        while (std::getline(dataFile, line)) {
             if (lineCount == dataSize) {
                 break;
             }
+            if (line.empty()) {
+                continue;
+            }
+            auto fields = parse_csv(line);
+            if (fields.size() < 8) {
+                // Skip malformed line
+                continue;
+            }
             lineCount++;
-            std::string token;
-            std::istringstream ss(line);
-            auto start = std::chrono::high_resolution_clock::now();
 
-            // For dataset Buildings
-            // perimeter 是周长
-            // low[0]是经度，low[1]是纬度，high[0]是经度，high[1]是纬度
-            ss >> id >> perimeter >> low[0] >> low[1] >> high[0] >> high[1];
-            
-            // // For dataset Tweet
-            // ss >> id >> low[0] >> low[1] >> high[0] >> high[1] >> perimeter;
+            // Parse fields
+            try {
+                id = std::stoi(fields[0]);
+            } catch (...) {
+                continue;
+            }
+            try {
+                area = std::stod(fields[1]);
+                min_lon = std::stod(fields[2]);
+                min_lat = std::stod(fields[3]);
+                max_lon = std::stod(fields[4]);
+                max_lat = std::stod(fields[5]);
+            } catch (...) {
+                // Skip lines with invalid numeric data
+                continue;
+            }
+            geom = fields[6];
+            tags = fields[7];
 
             std::string key = serialize_id(id);
-            std::string value = serialize_value(perimeter);
 
-            while(std::getline(ss, token, '\t')) {  // 把多边形 WKT (POLYGON ((...)))，OSM 标签 ([addr:postcode#..., building#yes, ...])拼接到value上
-                value += token + "\t";
-            }
-            if(!value.empty() && value.back() == ' ') { // 如果最后一位是空格，删除掉，保持干净
-                value.pop_back();
-            }
-            
+            // Build wide columns for this entity
+            std::string area_str = std::to_string(area);
+            std::string min_lon_str = std::to_string(min_lon);
+            std::string min_lat_str = std::to_string(min_lat);
+            std::string max_lon_str = std::to_string(max_lon);
+            std::string max_lat_str = std::to_string(max_lat);
+
+            WideColumns columns{{"area", area_str},
+                                {"min_lon", min_lon_str},
+                                {"min_lat", min_lat_str},
+                                {"max_lon", max_lon_str},
+                                {"max_lat", max_lat_str},
+                                {"geom", geom},
+                                {"tags", tags}};
+
             totalKeySize += key.size();
-            totalValueSize += value.size();
-            
+            totalEntityValuesSize += area_str.size() + min_lon_str.size() + min_lat_str.size() +
+                                     max_lon_str.size() + max_lat_str.size() + geom.size() + tags.size();
+
             if (lineCount % 100000 == 1) {
-                std::cout << "entries size " << value.size() << std::endl;
+                std::cout << "processed " << lineCount << " records" << std::endl;
             }
-            // auto start = std::chrono::high_resolution_clock::now();
-            s = db->Put(WriteOptions(), key, value);
+            auto start = std::chrono::high_resolution_clock::now();
+            s = db->PutEntity(WriteOptions(), default_cf, key, columns);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
             totalDuration = totalDuration + duration;
@@ -266,8 +338,8 @@ int main(int argc, char* argv[]) {
         std::cout << "end writing data" << std::endl;
         std::cout << "Total records written: " << lineCount << std::endl;
         std::cout << "Total key size: " << totalKeySize / 1024.0 / 1024.0 << " MB" << std::endl;
-        std::cout << "Total value size: " << totalValueSize / 1024.0 / 1024.0 << " MB" << std::endl;
-        std::cout << "Total data size: " << (totalKeySize + totalValueSize) / 1024.0 / 1024.0 << " MB" << std::endl;
+        std::cout << "Total entity values size (approx): " << totalEntityValuesSize / 1024.0 / 1024.0 << " MB" << std::endl;
+        std::cout << "Total data size (approx): " << (totalKeySize + totalEntityValuesSize) / 1024.0 / 1024.0 << " MB" << std::endl;
         std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
 
         sleep(5);    // 秒
