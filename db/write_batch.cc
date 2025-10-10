@@ -530,7 +530,7 @@ Status WriteBatchInternal::Iterate(const WriteBatch* wb,
     }
 
     switch (tag) {
-      case kTypeColumnFamilyValue:
+      case kTypeColumnFamilyValue:  // 共用同一段逻辑
       case kTypeValue:
         assert(wb->content_flags_.load(std::memory_order_relaxed) &
                (ContentFlags::DEFERRED | ContentFlags::HAS_PUT));
@@ -723,7 +723,7 @@ void WriteBatchInternal::SetAsLatestPersistentState(WriteBatch* b) {
 }
 
 uint32_t WriteBatchInternal::Count(const WriteBatch* b) {
-  return DecodeFixed32(b->rep_.data() + 8);
+  return DecodeFixed32(b->rep_.data() + 8); // 前 8 字节是序列号，所以偏移到第 8 字节 (+8) 才是 count 字段,DecodeFixed32() 负责从二进制中读出一个 32 位无符号整数（小端序）
 }
 
 void WriteBatchInternal::SetCount(WriteBatch* b, uint32_t n) {
@@ -791,14 +791,14 @@ Status WriteBatchInternal::Put(WriteBatch* b, uint32_t column_family_id,
   }
 
   LocalSavePoint save(b);
-  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
+  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);  // 先读取当前批次的操作数 Count(b)，+1，表示新添加了一条操作（例如 Put 或 Delete），然后set回去
   if (column_family_id == 0) {
-    b->rep_.push_back(static_cast<char>(kTypeValue));
+    b->rep_.push_back(static_cast<char>(kTypeValue)); // 0x1
   } else {
     b->rep_.push_back(static_cast<char>(kTypeColumnFamilyValue));
     PutVarint32(&b->rep_, column_family_id);
   }
-  PutLengthPrefixedSlice(&b->rep_, key);
+  PutLengthPrefixedSlice(&b->rep_, key);  // 先写入变长的 key 长度，然后写入 key 数据
   PutLengthPrefixedSlice(&b->rep_, value);
   b->content_flags_.store(
       b->content_flags_.load(std::memory_order_relaxed) | ContentFlags::HAS_PUT,
@@ -1982,7 +1982,7 @@ class MemTableInserter : public WriteBatch::Handler {
     // inplace_update_support is inconsistent with snapshots, and therefore with
     // any kind of transactions including the ones that use seq_per_batch
     assert(!seq_per_batch_ || !moptions->inplace_update_support);
-    if (!moptions->inplace_update_support) {
+    if (!moptions->inplace_update_support) {  // 进入
       ret_status =
           mem->Add(sequence_, value_type, key, value, kv_prot_info,
                    concurrent_memtable_writes_, get_post_process_info(mem),
@@ -2078,7 +2078,7 @@ class MemTableInserter : public WriteBatch::Handler {
       MaybeAdvanceSeq(kBatchBoundary);
     } else if (ret_status.ok()) {
       MaybeAdvanceSeq();
-      CheckMemtableFull();
+      CheckMemtableFull();  // 检查是否需要刷盘
     }
     // optimize for non-recovery mode
     // If `ret_status` is `TryAgain` then the next (successful) try will add
@@ -2852,7 +2852,7 @@ Status WriteBatchInternal::InsertInto(
     SetSequence(w->batch, inserter.sequence());
     inserter.set_log_number_ref(w->log_ref);
     inserter.set_prot_info(w->batch->prot_info_.get());
-    w->status = w->batch->Iterate(&inserter); // w是Writer， batch是WriteBatch
+    w->status = w->batch->Iterate(&inserter); // w是Writer， batch是WriteBatch，这一步插入Memtable
     if (!w->status.ok()) {
       return w->status;
     }

@@ -394,7 +394,7 @@ class MemTableIterator : public InternalIterator {
                                                    arena);
     } else {
       // adding iterator_context
-      iter_ = mem.table_->GetIterator(read_options.iterator_context, arena);
+      iter_ = mem.table_->GetIterator(read_options.iterator_context, arena);  // 初始化SkipListSecRep::Iterator
     }
     status_.PermitUncheckedError();
   }
@@ -739,15 +739,15 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
   uint32_t internal_key_size = key_size + 8;
   const uint32_t encoded_len = VarintLength(internal_key_size) +
                                internal_key_size + VarintLength(val_size) +
-                               val_size + moptions_.protection_bytes_per_key;
+                               val_size + moptions_.protection_bytes_per_key; // 1 + 12 + 2 + 1302 + 0 = 1317
   char* buf = nullptr;
   std::unique_ptr<MemTableRep>& table =
       type == kTypeRangeDeletion ? range_del_table_ : table_;
-  KeyHandle handle = table->Allocate(encoded_len, &buf);
+  KeyHandle handle = table->Allocate(encoded_len, &buf);  // 在 MemTable 的内部内存空间中，分配一块大小为 encoded_len 的连续内存，KeyHandle：一个“句柄”，实际上是一个轻量级指针或包装类型（例如 char* 或 void*），表示这条记录在 MemTable Arena 中的位置
 
   char* p = EncodeVarint32(buf, internal_key_size);
-  memcpy(p, key.data(), key_size);
-  Slice key_slice(p, key_size);
+  memcpy(p, key.data(), key_size);  // 只把user_key拷贝进去
+  Slice key_slice(p, key_size); // key_slice = user_key
   p += key_size;
   uint64_t packed = PackSequenceAndType(s, type);
   EncodeFixed64(p, packed);
@@ -758,7 +758,7 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
          (unsigned)encoded_len);
 
   UpdateEntryChecksum(kv_prot_info, key, value, type, s,
-                      buf + encoded_len - moptions_.protection_bytes_per_key);
+                      buf + encoded_len - moptions_.protection_bytes_per_key);  // 为 MemTable 中的每个 key-value 条目生成并写入校验和，用于数据完整性保护
   Slice encoded(buf, encoded_len - moptions_.protection_bytes_per_key);
   if (kv_prot_info != nullptr) {
     TEST_SYNC_POINT_CALLBACK("MemTable::Add:Encoded", &encoded);
@@ -768,10 +768,10 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
     }
   }
 
-  size_t ts_sz = GetInternalKeyComparator().user_comparator()->timestamp_size();
-  Slice key_without_ts = StripTimestampFromUserKey(key, ts_sz);
+  size_t ts_sz = GetInternalKeyComparator().user_comparator()->timestamp_size();  // 0
+  Slice key_without_ts = StripTimestampFromUserKey(key, ts_sz); // 啥都没干
 
-  if (!allow_concurrent) {
+  if (!allow_concurrent) {  // 进入
     // Extract prefix for insert with hint.
     if (insert_with_hint_prefix_extractor_ != nullptr &&
         insert_with_hint_prefix_extractor_->InDomain(key_slice)) {
@@ -780,8 +780,8 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
       if (UNLIKELY(!res)) {
         return Status::TryAgain("key+seq exists");
       }
-    } else {
-      bool res = table->InsertKey(handle);
+    } else {  // 进入
+      bool res = table->InsertKey(handle);  // memtable/skiplistrep.cc , 这里的table是SkipListSecRep类型的
       if (UNLIKELY(!res)) {
         return Status::TryAgain("key+seq exists");
       }
