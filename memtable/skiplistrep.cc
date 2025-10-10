@@ -463,7 +463,7 @@ class SkipListSecRep : public SkipListRep {
                 // std::cout << "query slice size: " << query_slice.size() << std::endl;
                 if (query_slice.size() == 16) { // 按一维数值范围过滤
                   // std::cout << "query range initialized" << std::endl;
-                  query_valrange_ = ReadValueRange(query_slice);  // util/rtree.cc
+                  query_valrange_ = ReadValueRange(query_slice);  // 定义在util/rtree.cc, 迭代器的成员变量
                 } else {  // 否则视为二维 MBR，按矩形是否相交过滤
                   query_mbr_ = ReadSecQueryMbr(query_slice);
                 }
@@ -497,7 +497,7 @@ class SkipListSecRep : public SkipListRep {
 
         // The NextIfDisjoint skip key if it does not intersect with the query mbr
         void NextIfDisjoint() {
-          if (Valid()) {
+          if (Valid()) {  // Valid() 表示是否成功获取到数据
             // Getting value and check the value
             // If value is not intersected or equal, skip
             Slice internal_key_slice = GetLengthPrefixedSlice(key());
@@ -509,9 +509,9 @@ class SkipListSecRep : public SkipListRep {
                 Next();
               }
             } else {
-              double val_num = *reinterpret_cast<const double*>(val_slice.data());
+              double val_num = *reinterpret_cast<const double*>(val_slice.data());  // 如果找到了就不往下递归遍历
               if (!IntersectValRangePoint(query_valrange_, val_num)) {
-                Next();
+                Next(); // 感觉是递归
               }
             }
           }  

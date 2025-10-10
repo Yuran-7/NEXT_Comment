@@ -1808,7 +1808,7 @@ InternalIterator* DBImpl::NewInternalIterator(
       !read_options.total_order_seek &&
           super_version->mutable_cf_options.prefix_extractor != nullptr);
   // Collect iterator for mutable memtable
-  auto mem_iter = super_version->mem->NewIterator(read_options, arena);
+  auto mem_iter = super_version->mem->NewIterator(read_options, arena); // db/memtable.cc 558
   Status s;
   if (!read_options.ignore_range_deletions) { // 进入
     TruncatedRangeDelIterator* mem_tombstone_iter = nullptr;

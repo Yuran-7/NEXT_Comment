@@ -529,7 +529,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
       if (!parallel) {  // 串行写入
         // w.sequence will be set inside InsertInto
-        w.status = WriteBatchInternal::InsertInto(  // w是Writer对象
+        w.status = WriteBatchInternal::InsertInto(  // w是Writer对象，里面有my_batch，WriteBatch对象，里面有string rep_
             write_group, current_sequence, column_family_memtables_.get(),
             &flush_scheduler_, &trim_history_scheduler_,
             write_options.ignore_missing_column_families,
@@ -2249,8 +2249,8 @@ Status DB::Put(const WriteOptions& opt, ColumnFamilyHandle* column_family,
   // 8 bytes are taken by header, 4 bytes for count, 1 byte for type,
   // and we allocate 11 extra bytes for key length, as well as value length.
   WriteBatch batch(key.size() + value.size() + 24, 0 /* max_bytes */,
-                   opt.protection_bytes_per_key, 0 /* default_cf_ts_sz */);
-  Status s = batch.Put(column_family, key, value);  // 构造一个 WriteBatch
+                   opt.protection_bytes_per_key, 0 /* default_cf_ts_sz */); // 这里也可以用无参构造函数WriteBatch batch;
+  Status s = batch.Put(column_family, key, value);  // 构造一个 WriteBatch, 如果想要写入多个KV对，可以多次调用 batch.Put() 方法
   if (!s.ok()) {
     return s;
   }
@@ -2286,7 +2286,7 @@ Status DB::PutEntity(const WriteOptions& options,
                    options.protection_bytes_per_key,
                    default_cf_ucmp->timestamp_size());
 
-  const Status s = batch.PutEntity(column_family, key, columns);
+  const Status s = batch.PutEntity(column_family, key, columns);  // db/write_batch.cc 932，类型是kTypeWideColumnEntity
   if (!s.ok()) {
     return s;
   }

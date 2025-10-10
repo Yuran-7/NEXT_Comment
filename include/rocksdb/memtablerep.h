@@ -402,7 +402,7 @@ public:
     using MemTableRepFactory::CreateMemTableRep;
     virtual MemTableRep* CreateMemTableRep(const MemTableRep::KeyComparator&,
                                            Allocator*, const SliceTransform*,
-                                           Logger* logger) override;
+                                           Logger* logger) override;  // 定义在memtable/skiplistrep.cc, 566行
 
     virtual const char* Name() const override {return "SkipListSecFactory";}
 
