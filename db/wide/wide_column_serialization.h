@@ -51,6 +51,10 @@ class WideColumnSerialization {
                                           const Slice& column_name);
   static Status GetValueOfDefaultColumn(Slice& input, Slice& value);
 
+  static Status GetValuesByColumnNames(
+      Slice& input, const std::vector<Slice>& column_names,
+      std::vector<Slice>& values);
+
   static constexpr uint32_t kCurrentVersion = 1;
 };
 

@@ -23,6 +23,7 @@
 #include "table/format.h"
 #include "util/rtree.h"
 #include "util/z_curve.h"
+#include "db/wide/wide_column_serialization.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -89,7 +90,8 @@ SecondaryIndexBuilder* SecondaryIndexBuilder::CreateSecIndexBuilder(
     const InternalKeyComparator* comparator,
     const InternalKeySliceTransform* int_key_slice_transform,
     const bool use_value_delta_encoding,
-    const BlockBasedTableOptions& table_opt) {
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns) {
   (void) int_key_slice_transform;
   SecondaryIndexBuilder* result = nullptr;
   switch (sec_index_type) {
@@ -100,7 +102,7 @@ SecondaryIndexBuilder* SecondaryIndexBuilder::CreateSecIndexBuilder(
     }
     case BlockBasedTableOptions::kOneDRtreeSec: {
       result = OneDRtreeSecondaryIndexBuilder::CreateIndexBuilder(
-         comparator, use_value_delta_encoding, table_opt);
+         comparator, use_value_delta_encoding, table_opt, sec_index_columns);
       break;
     }
     default: {
@@ -902,15 +904,18 @@ void RtreeSecondaryIndexBuilder::get_Secondary_Entries(
 OneDRtreeSecondaryIndexBuilder* OneDRtreeSecondaryIndexBuilder::CreateIndexBuilder(  // 创建一维R树辅助索引构建器的工厂方法
     const InternalKeyComparator* comparator,  // 内部键比较器
     const bool use_value_delta_encoding,  // 是否使用值增量编码
-    const BlockBasedTableOptions& table_opt) {  // 表选项
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns) {
   return new OneDRtreeSecondaryIndexBuilder(comparator, table_opt,  // 返回新创建的一维R树辅助索引构建器实例
-                                     use_value_delta_encoding);
+                                     use_value_delta_encoding,
+                                     sec_index_columns);
 }
 
-OneDRtreeSecondaryIndexBuilder::OneDRtreeSecondaryIndexBuilder(  // 一维R树辅助索引构建器构造函数
+OneDRtreeSecondaryIndexBuilder::OneDRtreeSecondaryIndexBuilder(  // 构造函数
     const InternalKeyComparator* comparator,  // 内部键比较器
     const BlockBasedTableOptions& table_opt,
-    const bool use_value_delta_encoding)  // 是否使用值增量编码
+    const bool use_value_delta_encoding,
+    const std::vector<Slice>& sec_index_columns)
     : SecondaryIndexBuilder(comparator),  // 调用基类构造函数，用comparator初始化comparator_
       index_block_builder_(table_opt.index_block_restart_interval,  // 初始化索引块构建器
                            true /*use_delta_encoding*/,  // 启用增量编码
@@ -918,7 +923,8 @@ OneDRtreeSecondaryIndexBuilder::OneDRtreeSecondaryIndexBuilder(  // 一维R树�
       sub_index_builder_(nullptr),  // 子索引构建器初始化为空
       table_opt_(table_opt),  // 保存表选项
       use_value_delta_encoding_(use_value_delta_encoding),  // 保存值增量编码选项
-      rtree_level_(1) {}  // R树层级初始化为1（叶子层）
+      rtree_level_(1),    // R树层级初始化为1（叶子层）
+      sec_index_columns_(sec_index_columns) {}
 
 OneDRtreeSecondaryIndexBuilder::~OneDRtreeSecondaryIndexBuilder() {  // 析构函数
   delete sub_index_builder_;  // 释放子索引构建器内存
@@ -943,7 +949,9 @@ void OneDRtreeSecondaryIndexBuilder::RequestPartitionCut() {  // 请求切割分
 
 void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\block_based\block_based_table_builder.cc调用的
     Slice val_temp = Slice(value);  // 创建值的临时切片
-    double numerical_val = *reinterpret_cast<const double*>(val_temp.data());  // 将值的前8字节解释为double类型的数值（一维辅助索引基于数值构建）
+    std::vector<Slice> extracted_values;
+    WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值
+    double numerical_val = *reinterpret_cast<const double*>(extracted_values[0].data());  // 将值的前8字节解释为double类型的数值（一维辅助索引基于数值构建）
     ValueRange temp_val_range;  // 创建临时值范围对象
     temp_val_range.set_range(numerical_val, numerical_val);  // 传入一个min，一个max
     // expandValrange(sub_index_enclosing_valrange_, temp_val_range);

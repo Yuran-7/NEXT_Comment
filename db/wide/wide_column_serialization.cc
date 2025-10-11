@@ -160,4 +160,95 @@ Status WideColumnSerialization::GetValueOfDefaultColumn(Slice& input,
   return Status::OK();
 }
 
+Status WideColumnSerialization::GetValuesByColumnNames(
+    Slice& input, const std::vector<Slice>& column_names,
+    std::vector<Slice>& values) {
+  
+  // 初始化输出：所有值先设为空
+  values.clear();
+  values.resize(column_names.size());
+  
+  if (column_names.empty()) {
+    return Status::OK();
+  }
+
+  // 1. 解析版本号
+  uint32_t version = 0;
+  if (!GetVarint32(&input, &version)) {
+    return Status::Corruption("Error decoding wide column version");
+  }
+  if (version > kCurrentVersion) {
+    return Status::NotSupported("Unsupported wide column version");
+  }
+
+  // 2. 解析列数
+  uint32_t num_columns = 0;
+  if (!GetVarint32(&input, &num_columns)) {
+    return Status::Corruption("Error decoding number of wide columns");
+  }
+  if (!num_columns) {
+    return Status::OK();  // 没有列，所有值保持为空
+  }
+
+  // 3. 解析索引区（列名+值大小），同时记录需要的列
+  struct ColumnInfo {
+    size_t request_index;  // 在用户请求的 column_names 中的索引
+    uint32_t value_size;   // 值的大小
+    size_t value_offset;   // 值在值区的偏移量
+  };
+  
+  std::vector<ColumnInfo> matched_columns;  // 存储匹配上的列信息
+  size_t value_offset = 0;  // 当前值在值区的偏移量
+  size_t request_idx = 0;   // 当前处理到 column_names 的哪个位置
+  
+  for (uint32_t i = 0; i < num_columns; ++i) {
+    // 解析列名
+    Slice name;
+    if (!GetLengthPrefixedSlice(&input, &name)) {
+      return Status::Corruption("Error decoding wide column name");
+    }
+
+    // 解析值大小
+    uint32_t value_size = 0;
+    if (!GetVarint32(&input, &value_size)) {
+      return Status::Corruption("Error decoding wide column value size");
+    }
+
+    // 双指针法：检查当前列名是否匹配用户请求
+    // 由于两边都是排序的，可以高效匹配
+    while (request_idx < column_names.size() && 
+           column_names[request_idx].compare(name) < 0) {
+      // 用户请求的列名小于当前列名，说明请求的列不存在，跳过
+      ++request_idx;
+    }
+    
+    if (request_idx < column_names.size() && 
+        column_names[request_idx].compare(name) == 0) {
+      // 匹配上了！记录这个列的信息
+      matched_columns.push_back({request_idx, value_size, value_offset});
+      ++request_idx;
+    }
+
+    // 更新值区偏移量
+    value_offset += value_size;
+  }
+
+  // 4. 现在 input 指向值区的开始位置
+  const char* value_data = input.data();
+  const size_t total_value_size = input.size();
+
+  // 5. 根据记录的信息提取值
+  for (const auto& info : matched_columns) {
+    if (info.value_offset + info.value_size > total_value_size) {
+      return Status::Corruption("Error decoding wide column value payload");
+    }
+    
+    // 直接构造指向原始数据的 Slice，零拷贝
+    values[info.request_index] = 
+        Slice(value_data + info.value_offset, info.value_size);
+  }
+
+  return Status::OK();
+}
+
 }  // namespace ROCKSDB_NAMESPACE

@@ -365,11 +365,11 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
-  -o secondary_index_data_write_num ../librocksdb_debug.a \
+  -o secondary_index_data_write_num ../librocksdb.a \
   -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
  */
 
 
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_buildings.txt
-// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m.csv

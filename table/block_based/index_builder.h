@@ -118,7 +118,8 @@ class SecondaryIndexBuilder {
       const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
       const InternalKeySliceTransform* int_key_slice_transform,
       const bool use_value_delta_encoding,
-      const BlockBasedTableOptions& table_opt);
+      const BlockBasedTableOptions& table_opt,
+      const std::vector<Slice>& sec_index_columns);
 
   // Index builder will construct a set of blocks which contain:
   //  1. One primary index block.
@@ -1166,11 +1167,13 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   static OneDRtreeSecondaryIndexBuilder* CreateIndexBuilder(
       const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
       const bool use_value_delta_encoding,
-      const BlockBasedTableOptions& table_opt);
+      const BlockBasedTableOptions& table_opt,
+      const std::vector<Slice>& sec_index_columns);
 
   explicit OneDRtreeSecondaryIndexBuilder(const InternalKeyComparator* comparator,
                                    const BlockBasedTableOptions& table_opt,
-                                   const bool use_value_delta_encoding);
+                                   const bool use_value_delta_encoding,
+                                   const std::vector<Slice>& sec_index_columns);
 
   virtual ~OneDRtreeSecondaryIndexBuilder();
 
@@ -1265,6 +1268,8 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   ValueRange temp_sec_valrange_;
   uint32_t rtree_level_;
   std::string rtree_height_str_;
+
+  std::vector<Slice> sec_index_columns_; // 用户指定的二级索引列
   void expandValrange(ValueRange& to_expand, ValueRange expander) {
     if (to_expand.empty()) {
       to_expand = expander;

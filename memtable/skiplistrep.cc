@@ -519,7 +519,7 @@ class SkipListSecRep : public SkipListRep {
     };
 
   virtual MemTableRep::Iterator* GetIterator(
-      IteratorContext* iterator_context,
+      IteratorContext* iterator_context,  // read_options.iterator_context，查询范围从read_options传递过来
       Arena* arena = nullptr) override {
     void *mem =
         arena ? arena->AllocateAligned(sizeof(SkipListSecRep::Iterator))

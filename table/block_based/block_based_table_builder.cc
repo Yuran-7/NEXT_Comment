@@ -489,10 +489,12 @@ struct BlockBasedTableBuilder::Rep {
           table_options));
     }
     if (table_options.create_secondary_index == true) {
+      // 从 MutableCFOptions 中获取用户配置的二级索引列
+      const std::vector<Slice>& sec_columns = moptions.sec_index_columns;
       sec_index_builder.reset(SecondaryIndexBuilder::CreateSecIndexBuilder( // 创建二级索引构建器
         table_options.sec_index_type, &internal_comparator,
         &this->internal_prefix_transform, use_delta_encoding_for_index_values,
-        table_options));
+        table_options, sec_columns));
         // std::cout << "sec index builder success" << std::endl;
         // sec_index_builder.reset(RtreeSecondaryIndexBuilder::CreateIndexBuilder());
     }
