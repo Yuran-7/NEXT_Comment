@@ -555,11 +555,12 @@ class DataBlockIter : public BlockIter<Slice> {
                 uint32_t num_restarts, SequenceNumber global_seqno,
                 BlockReadAmpBitmap* read_amp_bitmap, bool block_contents_pinned,
                 DataBlockHashIndex* data_block_hash_index, const std::string& query,
-                bool is_secondary_index_scan, bool is_secondary_index_spatial)
+                bool is_secondary_index_scan, bool is_secondary_index_spatial,
+                const std::vector<Slice>& sec_index_columns)
       : DataBlockIter() {
     Initialize(raw_ucmp, data, restarts, num_restarts, global_seqno,
                read_amp_bitmap, block_contents_pinned, data_block_hash_index, query,
-               is_secondary_index_scan, is_secondary_index_spatial);
+               is_secondary_index_scan, is_secondary_index_spatial, sec_index_columns);
   }  
   void Initialize(const Comparator* raw_ucmp, const char* data,
                   uint32_t restarts, uint32_t num_restarts,
@@ -626,7 +627,8 @@ class DataBlockIter : public BlockIter<Slice> {
                   DataBlockHashIndex* data_block_hash_index,
                   const std::string& query,
                   bool is_secondary_index_scan,
-                  bool is_secondary_index_spatial) {
+                  bool is_secondary_index_spatial,
+                  const std::vector<Slice>& sec_index_columns) {
     InitializeBase(raw_ucmp, data, restarts, num_restarts, global_seqno,
                    block_contents_pinned);
     raw_key_.SetIsUserKey(false);
@@ -637,6 +639,7 @@ class DataBlockIter : public BlockIter<Slice> {
     query_valrange_ = ReadValueRange(query_slice);
     is_spatial_ = is_secondary_index_spatial;
     is_sec_index_scan_ = is_secondary_index_scan;
+    sec_index_columns_ = sec_index_columns;
     // std::cout << "query_valrange_: " << query_valrange_ << std::endl;
   }  
 
@@ -718,6 +721,7 @@ class DataBlockIter : public BlockIter<Slice> {
   bool is_sec_index_scan_;
   Mbr query_mbr_;
   ValueRange query_valrange_;
+  std::vector<Slice> sec_index_columns_;
 
   bool IntersectMbr(
         const Slice& aa_orig,

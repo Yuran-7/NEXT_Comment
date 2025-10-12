@@ -26,6 +26,7 @@
 #include "table/block_based/data_block_footer.h"
 #include "table/format.h"
 #include "util/coding.h"
+#include "db/wide/wide_column_serialization.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -1269,7 +1270,7 @@ DataBlockIter* Block::NewSecondaryIndexDataIterator1D(const Comparator* raw_ucmp
           raw_ucmp, data_, restart_offset_, num_restarts_, global_seqno,
           read_amp_bitmap_.get(), block_contents_pinned,
           data_block_hash_index_.Valid() ? &data_block_hash_index_ : nullptr, context->query_mbr,
-          is_secondary_index_scan, is_secondary_index_spatial);       
+          is_secondary_index_scan, is_secondary_index_spatial, context->sec_index_columns);       
     }
 
     if (read_amp_bitmap_) {
@@ -1449,7 +1450,21 @@ bool DataBlockIter::IntersectValueRangePoint(
 
     double aa_val;
 
-    aa_val = *reinterpret_cast<const double*>(aa.data());
+    // 如果配置了二级索引列，使用列提取方式
+    if (!sec_index_columns_.empty()) {
+      std::vector<Slice> extracted_values;
+      WideColumnSerialization::GetValuesByColumnNames(aa, sec_index_columns_, extracted_values);
+      if (!extracted_values.empty()) {
+        aa_val = *reinterpret_cast<const double*>(extracted_values[0].data());
+      } else {
+        // 如果提取失败，返回false表示不匹配
+        return false;
+      }
+    } else {
+      // 如果没有配置二级索引列，使用原来的方式（直接读取value的前8字节）
+      aa_val = *reinterpret_cast<const double*>(aa.data());
+    }
+    
     if (aa_val > bb.range.max || bb.range.min > aa_val) {
       return false;
     }

@@ -101,7 +101,8 @@ namespace rocksdb {
 
     struct RtreeIteratorContext: public IteratorContext {
         std::string query_mbr;
-        RtreeIteratorContext(): query_mbr() {};
+        std::vector<Slice> sec_index_columns;
+        RtreeIteratorContext(): query_mbr(), sec_index_columns() {};
     };
 
     struct IntInterval {

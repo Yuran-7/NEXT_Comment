@@ -172,6 +172,7 @@ int main(int argc, char* argv[]) {
         auto start = std::chrono::high_resolution_clock::now();
         iterator_context.query_mbr = 
                 serialize_query(low[0], low[1]);
+        iterator_context.sec_index_columns = {"area"};
         read_options.iterator_context = &iterator_context;
         read_options.is_secondary_index_scan = true;
         read_options.is_secondary_index_spatial = false;
