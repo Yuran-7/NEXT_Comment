@@ -301,11 +301,11 @@ int main(int argc, char* argv[]) {
             std::string key = serialize_id(id);
 
             // Build wide columns for this entity
-            std::string area_str = std::to_string(area);
-            std::string min_lon_str = std::to_string(min_lon);
-            std::string min_lat_str = std::to_string(min_lat);
-            std::string max_lon_str = std::to_string(max_lon);
-            std::string max_lat_str = std::to_string(max_lat);
+            std::string area_str = serialize_value(area);
+            std::string min_lon_str = serialize_value(min_lon);
+            std::string min_lat_str = serialize_value(min_lat);
+            std::string max_lon_str = serialize_value(max_lon);
+            std::string max_lat_str = serialize_value(max_lat);
 
             WideColumns columns{{"area", area_str},
                                 {"min_lon", min_lon_str},
@@ -365,7 +365,7 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
-  -o secondary_index_data_write_num ../librocksdb.a \
+  -o secondary_index_data_write_num ../librocksdb_debug.a \
   -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
  */

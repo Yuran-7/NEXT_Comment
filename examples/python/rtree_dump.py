@@ -45,7 +45,7 @@ GlobalSecIndexValue 定义:
   - 每节点打印前若干分支: Bk: min=[..], max=[..], leaf => id=.. filenum=.. blk=(offset,size)
 
 使用:
-  python3 rtree_dump.py /path/to/global_rtree --max-nodes-per-level 10 --max-branches-per-node 10
+  python python/rtree_dump.py testdb/global_rtree --max-nodes-per-level 10 --max-branches-per-node 10
 
 返回码:
   0 成功
