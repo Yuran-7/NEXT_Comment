@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
         // std::cout << "created New iterator" << std::endl;
         int counter = 0;
         for (it->SeekToFirst(); it->Valid(); it->Next()) {
-            // 打印第一轮查询(i == 0)的所有key，检查是否大致升序；已知key为4字节int
+            // 打印第一个查询的所有key，检查是否大致升序；已知key为4字节int
             if (i == 0) {
                 const Slice key_slice = it->key();
                 if (key_slice.size() >= sizeof(int)) {

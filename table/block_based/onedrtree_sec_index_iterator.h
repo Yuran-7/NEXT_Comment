@@ -154,7 +154,7 @@ class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue> {
     }
   }
 
-  std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter_;
+  std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter_;  // 感觉没什么用啊
 
  private:
   friend class BlockBasedTableReaderTestVerifyChecksum_ChecksumMismatch_Test;
@@ -164,7 +164,7 @@ class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue> {
   const InternalKeyComparator& icomp_;
 #endif
   UserComparatorWrapper user_comparator_;
-  IndexBlockIter block_iter_;
+  IndexBlockIter block_iter_; // 真正对block中的每一个条目进行遍历的迭代器，table/block_based/block.h 772行
 
   // True if block_iter_ is initialized and points to the same block
   // as index iterator.
@@ -175,7 +175,7 @@ class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue> {
   ValueRange query_valrange_;
   uint32_t rtree_height_;
   std::vector<std::pair<uint64_t, uint64_t>>* found_sec_handles_ = new std::vector<std::pair<uint64_t, uint64_t>>();
-  std::vector<std::pair<uint64_t, uint64_t>>::iterator sec_blk_iter_;
+  std::vector<std::pair<uint64_t, uint64_t>>::iterator sec_blk_iter_; // 配合block_iter_使用
   std::stack<StackElement*> iterator_stack_;
 
   // If `target` is null, seek to first.

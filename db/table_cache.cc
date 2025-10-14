@@ -263,7 +263,7 @@ InternalIterator* TableCache::NewIterator(
         prefix_extractor, options.read_tier == kBlockCacheTier /* no_io */,
         !for_compaction /* record_read_stats */, file_read_hist, skip_filters,
         level, true /* prefetch_index_and_filter_in_cache */,
-        max_file_size_for_l0_meta_pin, file_meta.temperature);
+        max_file_size_for_l0_meta_pin, file_meta.temperature);  // 从缓存中找table_reader，找到直接返回，没找到先创建再加入到缓存
     if (s.ok()) {
       table_reader = GetTableReaderFromHandle(handle);
     }
@@ -276,7 +276,7 @@ InternalIterator* TableCache::NewIterator(
     } else {  // 进入这个分支
       result = table_reader->NewIterator(
           options, prefix_extractor.get(), arena, skip_filters, caller,
-          file_options.compaction_readahead_size, allow_unprepared_value);  // result 是 BlockBasedTableIterator
+          file_options.compaction_readahead_size, allow_unprepared_value);  // result 是 BlockBasedTableIterator，table/block_based/block_based_table_reader.cc 2128
     }
     if (handle != nullptr) {  // 不进入
       result->RegisterCleanup(&UnrefEntry, cache_, handle);

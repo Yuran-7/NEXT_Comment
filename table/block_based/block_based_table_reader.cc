@@ -579,7 +579,7 @@ CacheKey BlockBasedTable::GetCacheKey(const OffsetableCacheKey& base_cache_key,
   return base_cache_key.WithOffset(handle.offset() >> 2);
 }
 
-Status BlockBasedTable::Open(
+Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 616行 BlockBasedTableFactory::NewTableReader调用Open
     const ReadOptions& read_options, const ImmutableOptions& ioptions,
     const EnvOptions& env_options, const BlockBasedTableOptions& table_options,
     const InternalKeyComparator& internal_comparator,

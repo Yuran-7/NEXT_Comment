@@ -527,7 +527,7 @@ void DataBlockIter::SeekToFirstImpl() {
   if (data_ == nullptr) {  // Not init yet
     return;
   }
-  SeekToRestartPoint(0);
+  SeekToRestartPoint(0);  // 初始化了value_
   bool is_shared = false;
   // std::cout << "seekforfirstimpl" << std::endl;
   if (!is_spatial_ && !is_sec_index_scan_) {
@@ -607,7 +607,7 @@ void BlockIter<TValue>::CorruptionError() {
 template <class TValue>
 template <typename DecodeEntryFunc>
 bool BlockIter<TValue>::ParseNextKey(bool* is_shared) {
-  current_ = NextEntryOffset();
+  current_ = NextEntryOffset(); // 下一个entry的offset
   const char* p = data_ + current_;
   const char* limit = data_ + restarts_;  // Restarts come right after data
 
@@ -634,7 +634,7 @@ bool BlockIter<TValue>::ParseNextKey(bool* is_shared) {
       *is_shared = true;
       raw_key_.TrimAppend(shared, p, non_shared);
     }
-    value_ = Slice(p + non_shared, value_length);
+    value_ = Slice(p + non_shared, value_length); // 设置新的value_
     if (shared == 0) {
       while (restart_index_ + 1 < num_restarts_ &&
              GetRestartPoint(restart_index_ + 1) < current_) {

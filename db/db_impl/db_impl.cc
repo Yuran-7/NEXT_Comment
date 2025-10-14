@@ -1806,7 +1806,7 @@ InternalIterator* DBImpl::NewInternalIterator(
   MergeIteratorBuilder merge_iter_builder(
       &cfd->internal_sec_comparator(), arena, // 这个比较器等于不比较
       !read_options.total_order_seek &&
-          super_version->mutable_cf_options.prefix_extractor != nullptr);
+          super_version->mutable_cf_options.prefix_extractor != nullptr); // 在arena上创建MergingIterator，MergingIterator是MergeIteratorBuilder的成员变量
   // Collect iterator for mutable memtable
   auto mem_iter = super_version->mem->NewIterator(read_options, arena); // db/memtable.cc 558
   Status s;
@@ -1839,7 +1839,7 @@ InternalIterator* DBImpl::NewInternalIterator(
     if (read_options.read_tier != kMemtableTier) {
       super_version->current->AddIterators(read_options, file_options_,
                                            &merge_iter_builder,
-                                           allow_unprepared_value); // 此函数被重写
+                                           allow_unprepared_value); // 此函数被重写，arena可以从merge_iter_builder中获取
     }
     internal_iter = merge_iter_builder.Finish(
         read_options.ignore_range_deletions ? nullptr : db_iter);

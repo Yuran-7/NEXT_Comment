@@ -64,7 +64,7 @@ void BlockBasedTableIterator::SeekImpl(const Slice* target,
     if (target) {
       index_iter_->Seek(*target);
     } else {
-      index_iter_->SeekToFirst(); // 这是OneDRtreeSecIndexIterator::SeekToFirst()
+      index_iter_->SeekToFirst(); // 这是OneDRtreeSecIndexIterator::SeekToFirst()，index_iter_是在构造函数中初始化的，具体是table/block_based/block_based_table_reader.cc 2154行
     }
 
     if (!index_iter_->Valid()) {
@@ -211,7 +211,7 @@ void BlockBasedTableIterator::Next() {
   assert(block_iter_points_to_real_block_);
   // std::cout << "BlockBasedTableIterator calling block_iter_.next" << std::endl;
   block_iter_.Next();
-  FindKeyForward();
+  FindKeyForward(); // 关键，可能会跨data block调用Next()
   CheckOutOfBound();
 }
 

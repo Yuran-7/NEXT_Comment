@@ -178,8 +178,8 @@ InternalIteratorBase<IndexValue>* OneDRtreeSecIndexReader::NewIterator(
     //         index_has_first_key(), index_key_includes_seq(),
     //         index_value_is_full()));
     // std::cout << "three bools: " << index_has_first_key() << "; " << index_key_includes_seq() << "; " << index_value_is_full() << std::endl;
-    std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter(
-        index_block.GetValue()->NewIndexIterator( // CachableEntry<Block> index_block; GetValue()返回Block*
+    std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter( // 我感觉这个index_iter没有什么用，SeekToFirst、Next甚至Valid都与他无关
+        index_block.GetValue()->NewIndexIterator( // index_block是CachableEntry<Block>类型的，GetValue()返回Block*
             internal_comparator()->user_comparator(),
             rep->get_global_seqno(BlockType::kIndex), nullptr, kNullStats, true,
             index_has_first_key(), index_key_includes_seq(),

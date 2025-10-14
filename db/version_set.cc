@@ -2008,16 +2008,16 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
       // get the file location
       // file_level: location.GetLevel()
       // file_position: location.GetPosition()
-      auto hfile_loc = storage_info_.GetFileLocation(hfile_number); // 根据文件编号，获取FileLocation结构
+      auto hfile_loc = storage_info_.GetFileLocation(hfile_number); // 根据文件编号，获取FileLocation结构，FileLocation内容定义该文件在第几行的第几个位置
       if (hfile_loc.GetLevel() == -1) {
         read_options.found_sec_blkhandle->clear();  // 清空vector中的所有内容
         continue;
       } 
-      // 它访问的只是“内存里的元数据（来自 MANIFEST 重放/Version 构建时填充），并不意味着对应的 SST 文件已经被“打开”，file类型是FdWithKeyRange
+      // 它访问的只是“内存里的元数据（来自 MANIFEST 重放/Version 构建时填充），并不意味着对应的 SST 文件已经被“打开”
       const auto& file = storage_info_.LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];  // 根据 hfile_loc 的 Level 和在该 Level 中的位置，找到对应的文件简要信息，并用只读引用绑定到 file
       auto table_iter = cfd_->table_cache()->NewIterator( // cfd_是ColumnFamilyData类型的指针，是Version的成员变量
-          read_options, soptions, cfd_->internal_sec_comparator(),  // 注意这个比较器
-          *file.file_metadata, /*range_del_agg=*/nullptr,
+          read_options, soptions, cfd_->internal_sec_comparator(),  // 注意这个比较器，read_options记录该文件中若干个handleblock
+          *file.file_metadata, /*range_del_agg=*/nullptr, // file类型是FdWithKeyRange
           mutable_cf_options_.prefix_extractor, nullptr,
           cfd_->internal_stats()->GetFileReadHist(0),
           TableReaderCaller::kUserIterator, arena,

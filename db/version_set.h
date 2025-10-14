@@ -1074,14 +1074,14 @@ class Version {
           mget_stats);
 #endif
 
-  ColumnFamilyData* cfd_;  // ColumnFamilyData to which this Version belongs
+  ColumnFamilyData* cfd_;  // ColumnFamilyData to which this Version belongs，每个列簇都有自己的Version链
   Logger* info_log_;
   Statistics* db_statistics_;
   TableCache* table_cache_;
   BlobSource* blob_source_;
   const MergeOperator* merge_operator_;
 
-  VersionStorageInfo storage_info_;
+  VersionStorageInfo storage_info_; // 包含std::vector<FileMetaData*>* files_
   VersionSet* vset_;            // VersionSet to which this Version belongs
   Version* next_;               // Next version in linked list
   Version* prev_;               // Previous version in linked list

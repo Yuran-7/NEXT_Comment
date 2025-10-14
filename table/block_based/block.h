@@ -391,13 +391,13 @@ class BlockIter : public InternalIteratorBase<TValue> {
 
  protected:
   std::unique_ptr<InternalKeyComparator> icmp_;
-  const char* data_;       // underlying block contents
-  uint32_t num_restarts_;  // Number of uint32_t entries in restart array
+  const char* data_;       // underlying block contents，指向Block数据的起始地址
+  uint32_t num_restarts_;  // Number of uint32_t entries in restart array，Restart point的数量
 
-  // Index of restart block in which current_ or current_-1 falls
+  // Index of restart block in which current_ or current_-1 falls，当前所在的restart区间
   uint32_t restart_index_;
-  uint32_t restarts_;  // Offset of restart array (list of fixed32)
-  // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
+  uint32_t restarts_;  // Offset of restart array (list of fixed32)，Restart数组的偏移量
+  // current_ is offset in data_ of current entry.  >= restarts_ if !Valid，当前entry的偏移量
   uint32_t current_;
   // Raw key from block.
   IterKey raw_key_;
@@ -506,8 +506,8 @@ class BlockIter : public InternalIteratorBase<TValue> {
     // current_ will be fixed by ParseNextKey();
 
     // ParseNextKey() starts at the end of value_, so set value_ accordingly
-    uint32_t offset = GetRestartPoint(index);
-    value_ = Slice(data_ + offset, 0);
+    uint32_t offset = GetRestartPoint(index); // 读取restart数组中第0个位置，获取第一个完整key的偏移量
+    value_ = Slice(data_ + offset, 0);  // value_的结束位置就是下一次ParseNextKey()的起始位置
   }
 
   void CorruptionError();

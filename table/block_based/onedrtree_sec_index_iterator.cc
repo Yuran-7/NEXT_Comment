@@ -114,7 +114,7 @@ void OneDRtreeSecIndexIterator::SeekImpl(const Slice* target) {
     block_iter_.Next(); // 退出循环时，block_iter_停在
   }
   
-  FindKeyForwardSec();  // 正常情况下不做任何事
+  FindKeyForwardSec();  // 如果SeekToFirst成功，则不做任何事，如果失败，则会找下一个二级索引块，初始化新的block_iter_，有点像递归
 
   // std::cout << "First index entry value: " << ReadQueryMbr(block_iter_.key()) << std::endl;
 
@@ -182,7 +182,7 @@ void OneDRtreeSecIndexIterator::InitPartitionedIndexBlock(IndexBlockIter* block_
   else {
     partitioned_index_handle = block_iter->value().handle;
   }
-  if (!block_iter_points_to_real_block_ ||
+  if (!block_iter_points_to_real_block_ ||  // 默认false
       partitioned_index_handle.offset() != prev_block_offset_ ||
       // if previous attempt of reading the block missed cache, try again
       block_iter_.status().IsIncomplete()) {
