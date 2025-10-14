@@ -39,6 +39,8 @@ class MergingIterator;
 
 class MergingIteratorNoOrder;
 
+class PrefetchedResultsIterator;
+
 // A builder class to build a merging iterator by adding iterators one by one.
 // User should call only one of AddIterator() or AddPointAndTombstoneIterator()
 // exclusively for the same builder.
@@ -90,5 +92,10 @@ class MergeIteratorBuilder {
   std::vector<std::pair<size_t, TruncatedRangeDelIterator***>>
       range_del_iter_ptrs_;
 };
+
+// Create a prefetched results iterator wrapper for parallel spatial queries
+// Takes ownership of the underlying iterator
+InternalIterator* NewPrefetchedResultsIterator(
+    InternalIterator* underlying_iter, bool parallel_prefetch);
 
 }  // namespace ROCKSDB_NAMESPACE

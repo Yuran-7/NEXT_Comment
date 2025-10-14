@@ -177,6 +177,7 @@ int main(int argc, char* argv[]) {
         read_options.is_secondary_index_scan = true;
         read_options.is_secondary_index_spatial = false;
         read_options.async_io = true;
+        read_options.parallel_prefetch_all_results = true;  // Enable parallel prefetch for spatial queries
         // std::cout << "create newiterator" << std::endl;
         std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));  // it动态类型是ArenaWrappedDBIter
         // std::cout << "created New iterator" << std::endl;

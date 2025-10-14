@@ -7,6 +7,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include <chrono>
+#include <thread>
+#include <atomic>
 
 #include "table/merging_iterator.h"
 
@@ -122,6 +124,10 @@ class MaxHeapItemComparator {
  private:
   const InternalKeyComparator* comparator_;
 };
+
+// Forward declaration for parallel prefetching wrapper
+class PrefetchedResultsIterator;
+
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace {
 using MergerMinIterHeap = BinaryHeap<HeapItem*, MinHeapItemComparator>;
@@ -523,6 +529,7 @@ class MergingIterator : public InternalIterator {
 
  private:
   friend class MergeIteratorBuilder;
+  friend class PrefetchedResultsIterator;
   // Clears heaps for both directions, used when changing direction or seeking
   void ClearHeaps(bool clear_active = true);
   // Ensures that maxHeap_ is initialized when starting to go in the reverse
@@ -2519,6 +2526,168 @@ InternalIterator* MergeIteratorBuilder::Finish(ArenaWrappedDBIter* db_iter) {
     merge_iter = nullptr;
   }
   return ret;
+}
+
+// Prefetch-based iterator wrapper for parallel spatial queries
+// This wrapper prefetches all results from all child iterators in parallel
+// during SeekToFirst(), then serves them sequentially via Next()
+class PrefetchedResultsIterator : public InternalIterator {
+ public:
+  PrefetchedResultsIterator(InternalIterator* underlying_iter,
+                           bool parallel_prefetch)
+      : underlying_iter_(underlying_iter),
+        parallel_prefetch_(parallel_prefetch),
+        current_index_(0),
+        prefetch_done_(false) {}
+
+  ~PrefetchedResultsIterator() override {
+    delete underlying_iter_;
+  }
+
+  void SeekToFirst() override {
+    if (!prefetch_done_ && parallel_prefetch_) {
+      DoPrefetchAll();
+      prefetch_done_ = true;
+    } else if (!parallel_prefetch_) {
+      underlying_iter_->SeekToFirst();
+    }
+    current_index_ = 0;
+  }
+
+  void Next() override {
+    if (prefetch_done_) {
+      current_index_++;
+    } else {
+      underlying_iter_->Next();
+    }
+  }
+
+  bool Valid() const override {
+    if (prefetch_done_) {
+      return current_index_ < results_.size();
+    }
+    return underlying_iter_->Valid();
+  }
+
+  Slice key() const override {
+    if (prefetch_done_) {
+      return results_[current_index_].first;
+    }
+    return underlying_iter_->key();
+  }
+
+  Slice value() const override {
+    if (prefetch_done_) {
+      return results_[current_index_].second;
+    }
+    return underlying_iter_->value();
+  }
+
+  Status status() const override {
+    return status_;
+  }
+
+  // Not needed for spatial queries
+  void Seek(const Slice& /*target*/) override {
+    assert(false && "Seek not supported in PrefetchedResultsIterator");
+  }
+
+  void SeekForPrev(const Slice& /*target*/) override {
+    assert(false && "SeekForPrev not supported in PrefetchedResultsIterator");
+  }
+
+  void SeekToLast() override {
+    assert(false && "SeekToLast not supported in PrefetchedResultsIterator");
+  }
+
+  void Prev() override {
+    assert(false && "Prev not supported in PrefetchedResultsIterator");
+  }
+
+  bool PrepareValue() override { return true; }
+  void SetPinnedItersMgr(PinnedIteratorsManager* /*pinned_iters_mgr*/) override {}
+  bool IsKeyPinned() const override { return false; }
+  bool IsValuePinned() const override { return false; }
+
+ private:
+  void DoPrefetchAll() {
+    auto* merging_iter = dynamic_cast<MergingIterator*>(underlying_iter_);
+    if (!merging_iter) {
+      // Fallback to serial if not a MergingIterator
+      FallbackToSerial();
+      return;
+    }
+
+    // Parallel execution of SeekToFirst + traversal for all children
+    std::vector<std::thread> threads;
+    std::vector<std::vector<std::pair<std::string, std::string>>> 
+        per_thread_results(merging_iter->children_.size());
+    std::atomic<bool> has_error{false};
+
+    for (size_t i = 0; i < merging_iter->children_.size(); ++i) {
+      threads.emplace_back([&, i]() {
+        auto& child = merging_iter->children_[i];
+        child.iter.SeekToFirst();
+        
+        while (child.iter.Valid() && !has_error.load()) {
+          // Copy key/value to thread-local buffer
+          per_thread_results[i].emplace_back(
+              child.iter.key().ToString(),
+              child.iter.value().ToString()
+          );
+          child.iter.Next();
+          
+          if (!child.iter.status().ok()) {
+            has_error.store(true);
+            status_ = child.iter.status();
+            break;
+          }
+        }
+      });
+    }
+
+    // Wait for all threads to complete
+    for (auto& t : threads) {
+      t.join();
+    }
+
+    if (has_error.load()) {
+      results_.clear();
+      return;
+    }
+
+    // Merge all thread results into results_
+    for (auto& thread_results : per_thread_results) {
+      results_.insert(results_.end(),
+                      thread_results.begin(),
+                      thread_results.end());
+    }
+  }
+
+  void FallbackToSerial() {
+    underlying_iter_->SeekToFirst();
+    while (underlying_iter_->Valid()) {
+      results_.emplace_back(
+          underlying_iter_->key().ToString(),
+          underlying_iter_->value().ToString()
+      );
+      underlying_iter_->Next();
+    }
+    status_ = underlying_iter_->status();
+  }
+
+  InternalIterator* underlying_iter_;
+  bool parallel_prefetch_;
+  bool prefetch_done_;
+  size_t current_index_;
+  std::vector<std::pair<std::string, std::string>> results_;
+  Status status_;
+};
+
+// Factory function to create a prefetched results iterator
+InternalIterator* NewPrefetchedResultsIterator(
+    InternalIterator* underlying_iter, bool parallel_prefetch) {
+  return new PrefetchedResultsIterator(underlying_iter, parallel_prefetch);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

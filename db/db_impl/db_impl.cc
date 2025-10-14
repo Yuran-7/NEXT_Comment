@@ -1843,6 +1843,13 @@ InternalIterator* DBImpl::NewInternalIterator(
     }
     internal_iter = merge_iter_builder.Finish(
         read_options.ignore_range_deletions ? nullptr : db_iter);
+    
+    // Wrap with PrefetchedResultsIterator if parallel prefetch is enabled for spatial queries
+    if (read_options.parallel_prefetch_all_results &&
+        read_options.is_secondary_index_scan) {
+      internal_iter = NewPrefetchedResultsIterator(internal_iter, true);
+    }
+    
     SuperVersionHandle* cleanup = new SuperVersionHandle(
         this, &mutex_, super_version,
         read_options.background_purge_on_iterator_cleanup ||

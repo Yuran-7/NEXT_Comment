@@ -1712,6 +1712,13 @@ struct ReadOptions {
   bool is_secondary_index_spatial=true;
   std::vector<std::pair<uint64_t, uint64_t>>* found_sec_blkhandle = new std::vector<std::pair<uint64_t, uint64_t>>(); // 每个SST创建完之后就会清空一次，分别是offset和size
 
+  // Enable parallel prefetch of all results for secondary index spatial queries
+  // When enabled, SeekToFirst() will prefetch all matching results in parallel
+  // from all child iterators (memtable, immutable memtables, and SST files).
+  // This is beneficial for spatial range queries where global ordering is not required.
+  // Default: false
+  bool parallel_prefetch_all_results = false;
+
   ReadOptions();
   ReadOptions(bool cksum, bool cache);
 };
