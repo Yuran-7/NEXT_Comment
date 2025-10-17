@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) {
         read_options.is_secondary_index_scan = true;
         read_options.is_secondary_index_spatial = false;
         read_options.async_io = true;
-        read_options.parallel_prefetch_all_results = true;  // Enable parallel prefetch for spatial queries
+//        read_options.parallel_prefetch_all_results = true;  // Enable parallel prefetch for spatial queries
         // std::cout << "create newiterator" << std::endl;
         std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));  // it动态类型是ArenaWrappedDBIter
         // std::cout << "created New iterator" << std::endl;
@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         totalDuration = totalDuration + duration;
         // resFile << "Results: \t" << counter << "\t" << totalDuration.count() << "\n";
-        std::cout << "number of results: " << counter << std::endl;     
+        std::cout << "search " << i + 1 << " number of results: " << counter << std::endl;
         // std::cout << "Query Duration: " << duration.count() << " nanoseconds" << std::endl;   
         totalResults += counter;
     }
@@ -230,9 +230,9 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_read_num.cc \
-  -o secondary_index_read_num ../librocksdb.a \
+  -o secondary_index_read_num ../librocksdb_debug.a \
   -I../include -I.. \
-  -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb
+  -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
 
  // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.01

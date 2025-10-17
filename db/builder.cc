@@ -50,7 +50,7 @@ TableBuilder* NewTableBuilder(const TableBuilderOptions& tboptions,
   assert((tboptions.column_family_id ==
           TablePropertiesCollectorFactory::Context::kUnknownColumnFamily) ==
          tboptions.column_family_name.empty());
-  return tboptions.ioptions.table_factory->NewTableBuilder(tboptions, file);
+  return tboptions.ioptions.table_factory->NewTableBuilder(tboptions, file);  // table/block_based/block_based_table_factory.cc，635行
 }
 
 Status BuildTable(
@@ -147,7 +147,7 @@ Status BuildTable(
       bool use_direct_writes = file_options.use_direct_writes;
       TEST_SYNC_POINT_CALLBACK("BuildTable:create_file", &use_direct_writes);
 #endif  // !NDEBUG
-      IOStatus io_s = NewWritableFile(fs, fname, &file, file_options);
+      IOStatus io_s = NewWritableFile(fs, fname, &file, file_options);  // 创建文件
       assert(s.ok());
       s = io_s;
       if (io_status->ok()) {

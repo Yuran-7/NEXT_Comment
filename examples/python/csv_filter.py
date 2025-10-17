@@ -5,7 +5,7 @@ CSV 行过滤脚本
 根据指定列和值查找并打印匹配的行
 
 使用方法：
-    python python/csv_filter.py /NV1/ysh/dataset/buildings_1m/buildings_1m.csv id 106144990
+    python python/csv_filter.py /NV1/ysh/dataset/buildings_1m/buildings_1m.csv id 101027080
     python csv_filter.py data.csv name "张三"
     python csv_filter.py data.csv age 25
 

@@ -2537,11 +2537,11 @@ class PrefetchedResultsIterator : public InternalIterator {
                            bool parallel_prefetch)
       : underlying_iter_(underlying_iter),
         parallel_prefetch_(parallel_prefetch),
-        current_index_(0),
-        prefetch_done_(false) {}
+        prefetch_done_(false),
+        current_index_(0) {}
 
   ~PrefetchedResultsIterator() override {
-    delete underlying_iter_;
+    // delete underlying_iter_;
   }
 
   void SeekToFirst() override {
@@ -2611,7 +2611,7 @@ class PrefetchedResultsIterator : public InternalIterator {
 
  private:
   void DoPrefetchAll() {
-    auto* merging_iter = dynamic_cast<MergingIterator*>(underlying_iter_);
+    auto* merging_iter = static_cast<MergingIterator*>(underlying_iter_);
     if (!merging_iter) {
       // Fallback to serial if not a MergingIterator
       FallbackToSerial();
@@ -2686,8 +2686,15 @@ class PrefetchedResultsIterator : public InternalIterator {
 
 // Factory function to create a prefetched results iterator
 InternalIterator* NewPrefetchedResultsIterator(
-    InternalIterator* underlying_iter, bool parallel_prefetch) {
-  return new PrefetchedResultsIterator(underlying_iter, parallel_prefetch);
+    InternalIterator* underlying_iter, bool parallel_prefetch,
+    Arena* arena) {
+  if (arena != nullptr) {
+    // Allocate on Arena - no manual cleanup needed
+    auto mem = arena->AllocateAligned(sizeof(PrefetchedResultsIterator));
+    return new (mem) PrefetchedResultsIterator(underlying_iter, parallel_prefetch);
+  } else {
+    // Allocate on heap
+    return new PrefetchedResultsIterator(underlying_iter, parallel_prefetch);
+  }
 }
-
 }  // namespace ROCKSDB_NAMESPACE

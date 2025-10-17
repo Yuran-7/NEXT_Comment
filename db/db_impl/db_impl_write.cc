@@ -148,6 +148,31 @@ Status DBImpl::WriteWithCallback(const WriteOptions& write_options,
 // The main write queue. This is the only write queue that updates LastSequence.
 // When using one write queue, the same sequence also indicates the last
 // published sequence.
+//
+// 【与 LevelDB::DBImpl::Write 的对应关系（中文对照）】
+// 下面的 WriteImpl 是在 LevelDB 写路径基础上做了大量增强，但核心阶段是一致的：
+// 1) 构建每个写线程的 Writer、进入写队列并等待成为“队长”（Leader）
+//    - LevelDB: Writer w + writers_.push_back(&w) + 等队长
+//    - RocksDB: WriteThread::Writer w; write_thread_.JoinBatchGroup(&w)
+// 2) 队长做“MakeRoomForWrite”前置工作（切/刷 WAL、调度 flush/compaction、写入可恢复状态等）
+//    - LevelDB: MakeRoomForWrite(...)
+//    - RocksDB: PreprocessWrite(write_options, &log_context, &write_context)
+// 3) 队长收拢一批写者形成批次（BuildBatchGroup）
+//    - LevelDB: BuildBatchGroup(&last_writer)
+//    - RocksDB: write_thread_.EnterAsBatchGroupLeader(&w, &write_group)
+// 4) 读取最新序列号，给批次分配连续的序列号区间
+//    - LevelDB: last_sequence = versions_->LastSequence(); SetSequence(...)
+//    - RocksDB: 计算 current_sequence = last_sequence + 1，并按配置（按 key 或按 batch）推进
+// 5) 写 WAL（AddRecord）与可选的 Sync
+//    - LevelDB: log_->AddRecord(...); if (sync) logfile_->Sync()
+//    - RocksDB: 单队列 WriteToWAL(...)；并发/无序 ConcurrentWriteToWAL(...);
+//              按需 MarkLogsSynced/SyncWAL/FlushWAL/ApplyWALToManifest
+// 6) 应用到 MemTable（InsertInto），可能串行或并行
+//    - LevelDB: WriteBatchInternal::InsertInto(mem_)
+//    - RocksDB: WriteBatchInternal::InsertInto(write_group 或单个 w)
+// 7) 更新全局可见的最后序列号（SetLastSequence），并唤醒队列中的后续写者
+//    - LevelDB: versions_->SetLastSequence(last_sequence) + 唤醒下一位
+//    - RocksDB: versions_->SetLastSequence(last_sequence)；通过 WriteThread 统一出队与唤醒
 Status DBImpl::WriteImpl(const WriteOptions& write_options,
                          WriteBatch* my_batch, WriteCallback* callback,
                          uint64_t* log_used, uint64_t log_ref,
@@ -285,11 +310,13 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   }
   // 用来跟踪 写入操作在正式写之前和写之后处理阶段 的耗时
   PERF_TIMER_GUARD(write_pre_and_post_process_time);  // 在当前作用域内声明一个定时器，并立即开始计时
+  // 对应 LevelDB::Write 第一步：构建 Writer 请求结构（非加锁本身），准备进入写队列
   WriteThread::Writer w(write_options, my_batch, callback, log_ref,
                         disable_memtable, batch_cnt, pre_release_callback,
                         post_memtable_callback);  // WriteThread是一个类，Writer是它的嵌套结构体
   StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
 
+  // 对应 LevelDB::Write 第二步：进入写队列并等待成为队长（Leader）或作为跟随者（Follower）
   write_thread_.JoinBatchGroup(&w); // DBImpl的成员变量 write_thread_ 是一个 WriteThread 对象
   if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) { // 并行写入的跟随者
     // we are a non-leader in a parallel group
@@ -341,7 +368,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     // write is complete and leader has updated sequence
     return w.FinalStatus();
   }
-  // else we are the leader of the write batch group
+  // 否则：与 LevelDB 一样，我们是本批次的“队长”，负责 WAL 写入与（可能的）MemTable 应用
   assert(w.state == WriteThread::STATE_GROUP_LEADER);
   Status status;
   // Once reaches this point, the current writer "w" will try to do its write
@@ -363,7 +390,9 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     // PreprocessWrite does its own perf timing.
     PERF_TIMER_STOP(write_pre_and_post_process_time);
 
-    status = PreprocessWrite(write_options, &log_context, &write_context);  // 组长前置处理（必要的准备）：切 WAL、滚动文件、写可恢复状态、挑选/触发 flush/compaction 等前置工作。失败会直接短路。
+    // 对应 LevelDB::MakeRoomForWrite(...)：
+    // 组长前置处理（必要的准备）：切换/刷 WAL、滚动文件、写入可恢复状态、触发/调度 flush/compaction、限速/限流/阻塞等。
+    status = PreprocessWrite(write_options, &log_context, &write_context);  // 失败会直接短路。
     if (!two_write_queues_) {
       // Assign it after ::PreprocessWrite since the sequence might advance
       // inside it by WriteRecoverableState
@@ -379,8 +408,9 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   // into memtables
 
   TEST_SYNC_POINT("DBImpl::WriteImpl:BeforeLeaderEnters");
+  // 对应 LevelDB::BuildBatchGroup：作为队长，收拢一批写者形成本次批次
   last_batch_group_size_ =
-      write_thread_.EnterAsBatchGroupLeader(&w, &write_group);  // 获取本次批组
+    write_thread_.EnterAsBatchGroupLeader(&w, &write_group);  // 获取本次批组
 
   IOStatus io_s;
   Status pre_release_cb_status;
@@ -465,7 +495,8 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
     PERF_TIMER_STOP(write_pre_and_post_process_time);
 
-    if (!two_write_queues_) { // 单队列模式
+    // 对应 LevelDB：WAL 写入（AddRecord）与可选的 Sync
+    if (!two_write_queues_) { // 单队列模式（串行 WAL）
       if (status.ok() && !write_options.disableWAL) {
         assert(log_context.log_file_number_size);
         LogFileNumberSize& log_file_number_size =
@@ -476,7 +507,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
                        log_context.need_log_sync, log_context.need_log_dir_sync,
                        last_sequence + 1, log_file_number_size);
       }
-    } else {  // 双队列并发 WAL
+    } else {  // 双队列并发 WAL（可能与 unordered_write 配合）
       if (status.ok() && !write_options.disableWAL) {
         PERF_TIMER_GUARD(write_wal_time);
         // LastAllocatedSequence is increased inside WriteToWAL under
@@ -490,11 +521,11 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     }
     status = io_s;
     assert(last_sequence != kMaxSequenceNumber);
-    const SequenceNumber current_sequence = last_sequence + 1;
+    const SequenceNumber current_sequence = last_sequence + 1; // 对应 LevelDB：为本批次设置起始序列号
     last_sequence += seq_inc;
 
     // PreReleaseCallback is called after WAL write and before memtable write，PreRelease 回调（如果用户配置了）
-    if (status.ok()) {
+    if (status.ok()) {  // 对应 LevelDB：为批次/每个 writer 填入 sequence，并按配置推进 next_sequence
       SequenceNumber next_sequence = current_sequence;
       size_t index = 0;
       // Note: the logic for advancing seq here must be consistent with the
@@ -527,6 +558,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     if (status.ok()) {
       PERF_TIMER_GUARD(write_memtable_time);
 
+      // 对应 LevelDB：将批次应用到 MemTable（InsertInto）
       if (!parallel) {  // 串行写入
         // w.sequence will be set inside InsertInto
         w.status = WriteBatchInternal::InsertInto(  // w是Writer对象，里面有my_batch，WriteBatch对象，里面有string rep_
@@ -576,7 +608,8 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     assert(pre_release_cb_status.ok());
   }
 
-  if (log_context.need_log_sync) {  // 如果本次需要 sync（log_context.need_log_sync），处理 MarkLogsSynced/SyncWAL/FlushWAL/ApplyWALToManifest 等，确保 WAL 的持久化承诺兑现
+  // 对应 LevelDB：需要同步时执行 Sync（RockDB 还会做 Manifest 记录/目录同步等扩展）
+  if (log_context.need_log_sync) {  // 如果本次需要 sync，处理 MarkLogsSynced/SyncWAL/FlushWAL/ApplyWALToManifest 等，确保 WAL 的持久化承诺兑现
     VersionEdit synced_wals;
     log_write_mutex_.Lock();
     if (status.ok()) {
@@ -622,9 +655,10 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       }
       // Note: if we are to resume after non-OK statuses we need to revisit how
       // we reacts to non-OK statuses here.
-      versions_->SetLastSequence(last_sequence);  // 推进全局可见的最后序列号
+      versions_->SetLastSequence(last_sequence);  // 对应 LevelDB：推进全局可见的最后序列号
     }
     MemTableInsertStatusCheck(w.status);
+    // 对应 LevelDB：出队、分发状态并唤醒下一位（由 WriteThread 封装完成）
     write_thread_.ExitAsBatchGroupLeader(write_group, status);
   }
 

@@ -22,7 +22,7 @@ void BlockBasedTableIterator::Seek(const Slice& target) {
 }
 
 void BlockBasedTableIterator::SeekImpl(const Slice* target,
-                                       bool async_prefetch) {
+                                       bool async_prefetch) { // 和原始rocksdb一模一样
   // std::cout << "BlockBasedTableIterator SeekToFirst" << std::endl;
   bool is_first_pass = true;
   if (async_read_in_progress_) {  // 不进入

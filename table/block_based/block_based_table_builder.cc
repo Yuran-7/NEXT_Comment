@@ -580,7 +580,7 @@ struct BlockBasedTableBuilder::Rep {
   std::mutex io_status_mutex;
   std::atomic<bool> io_status_ok;
   IOStatus io_status;
-};
+};  // Rep定义结束
 
 struct BlockBasedTableBuilder::ParallelCompressionRep {
   // Keys is a wrapper of vector of strings avoiding
@@ -1248,7 +1248,7 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
                                            CompressionType type,
                                            BlockHandle* handle,
                                            BlockType block_type,
-                                           const Slice* raw_block_contents) { // 新增的函数
+                                           const Slice* raw_block_contents) { // 不是新增的
   Rep* r = rep_;
   bool is_data_block = block_type == BlockType::kData;
   StopWatch sw(r->ioptions.clock, r->ioptions.stats, WRITE_RAW_BLOCK_MICROS);

@@ -96,6 +96,7 @@ class MergeIteratorBuilder {
 // Create a prefetched results iterator wrapper for parallel spatial queries
 // Takes ownership of the underlying iterator
 InternalIterator* NewPrefetchedResultsIterator(
-    InternalIterator* underlying_iter, bool parallel_prefetch);
+    InternalIterator* underlying_iter, bool parallel_prefetch,
+    Arena* arena = nullptr);
 
 }  // namespace ROCKSDB_NAMESPACE

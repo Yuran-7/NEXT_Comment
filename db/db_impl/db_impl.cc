@@ -1847,7 +1847,7 @@ InternalIterator* DBImpl::NewInternalIterator(
     // Wrap with PrefetchedResultsIterator if parallel prefetch is enabled for spatial queries
     if (read_options.parallel_prefetch_all_results &&
         read_options.is_secondary_index_scan) {
-      internal_iter = NewPrefetchedResultsIterator(internal_iter, true);
+      internal_iter = NewPrefetchedResultsIterator(internal_iter, true, arena);
     }
     
     SuperVersionHandle* cleanup = new SuperVersionHandle(
