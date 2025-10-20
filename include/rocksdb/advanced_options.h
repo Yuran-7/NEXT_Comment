@@ -1070,6 +1070,8 @@ struct AdvancedColumnFamilyOptions {
   char* global_sec_index_loc = nullptr;
   bool global_sec_index_is_spatial = true;
 
+  bool global_sec_index_is_btree = false;
+
   std::vector<Slice> sec_index_columns = {Slice("area")}; // 默认选择面积列作为二级索引
   // Create ColumnFamilyOptions with default values for all fields
   AdvancedColumnFamilyOptions();

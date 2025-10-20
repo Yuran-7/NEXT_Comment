@@ -53,7 +53,7 @@ TableBuilder* NewTableBuilder(const TableBuilderOptions& tboptions,
   return tboptions.ioptions.table_factory->NewTableBuilder(tboptions, file);  // table/block_based/block_based_table_factory.cc，635行
 }
 
-Status BuildTable(
+Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使用这个函数
     const std::string& dbname, VersionSet* versions,
     const ImmutableDBOptions& db_options, const TableBuilderOptions& tboptions,
     const FileOptions& file_options, TableCache* table_cache,

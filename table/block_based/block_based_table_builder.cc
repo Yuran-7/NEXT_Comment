@@ -1258,7 +1258,7 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
   assert(io_status().ok());
 
   {
-    IOStatus io_s = r->file->Append(block_contents);
+    IOStatus io_s = r->file->Append(block_contents); // file/writable_file_writer.cc
     if (!io_s.ok()) {
       r->SetIOStatus(io_s);
       return;
@@ -1697,8 +1697,17 @@ void BlockBasedTableBuilder::WriteSecIndexBlock(
   if (rep_->table_options.create_secondary_index == true) {
     SecondaryIndexBuilder::IndexBlocks sec_index_blocks; 
     BlockHandle sec_index_block_handle;
+
+        // 动态类型转换，因为 IsEmbedded 是 BtreeSecondaryIndexBuilder 的特定方法
+    auto* btree_sec_index_builder =
+        dynamic_cast<BtreeSecondaryIndexBuilder*>(rep_->sec_index_builder.get());
+
+    if (!btree_sec_index_builder || btree_sec_index_builder->IsEmbedded()) {
+      // 辅助索引构建器不存在，或者它是嵌入式的，直接返回
+      return;
+    }
     
-    // 调用Finish函数完成索引构建，将内存中的索引数据序列化为可写入磁盘的格式
+    // 第一次调用Finish
     auto sec_index_builder_status = rep_->sec_index_builder->Finish(&sec_index_blocks);
     
     // 处理分区索引的情况（当索引过大时会分成多个分区）

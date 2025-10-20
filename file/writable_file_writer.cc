@@ -359,7 +359,7 @@ IOStatus WritableFileWriter::Flush(Env::IOPriority op_rate_limiter_priority) {
                                       op_rate_limiter_priority);
       } else {
         s = WriteBuffered(buf_.BufferStart(), buf_.CurrentSize(),
-                          op_rate_limiter_priority);
+                          op_rate_limiter_priority);  // 将用户空间缓冲区写入操作系统，WriteBuffered() → PosixWrite() → write() 系统调用
       }
     }
     if (!s.ok()) {
@@ -379,7 +379,7 @@ IOStatus WritableFileWriter::Flush(Env::IOPriority op_rate_limiter_priority) {
     io_options.rate_limiter_priority =
         WritableFileWriter::DecideRateLimiterPriority(
             writable_file_->GetIOPriority(), op_rate_limiter_priority);
-    s = writable_file_->Flush(io_options, nullptr);
+    s = writable_file_->Flush(io_options, nullptr); // 调用底层文件系统的 Flush
 #ifndef ROCKSDB_LITE
     if (ShouldNotifyListeners()) {
       auto finish_ts = std::chrono::steady_clock::now();

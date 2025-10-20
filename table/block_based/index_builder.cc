@@ -106,6 +106,11 @@ SecondaryIndexBuilder* SecondaryIndexBuilder::CreateSecIndexBuilder(
          comparator, use_value_delta_encoding, table_opt, sec_index_columns);
       break;
     }
+    case BlockBasedTableOptions::kBtreeSec: {
+      result = BtreeSecondaryIndexBuilder::CreateIndexBuilder(
+         comparator, use_value_delta_encoding, table_opt, sec_index_columns);
+      break;
+    }
     default: {
       assert(!"Do not recognize the index type ");
       break;
@@ -918,9 +923,9 @@ OneDRtreeSecondaryIndexBuilder::OneDRtreeSecondaryIndexBuilder(  // 构造函数
     const bool use_value_delta_encoding,
     const std::vector<Slice>& sec_index_columns)
     : SecondaryIndexBuilder(comparator),  // 调用基类构造函数，用comparator初始化comparator_
-      index_block_builder_(table_opt.index_block_restart_interval,  // 初始化索引块构建器
-                           true /*use_delta_encoding*/,  // 启用增量编码
-                           use_value_delta_encoding),  // 值增量编码选项
+      index_block_builder_(table_opt.index_block_restart_interval,
+                           true /*use_delta_encoding*/,
+                           use_value_delta_encoding),  // 没有被使用
       sub_index_builder_(nullptr),  // 子索引构建器初始化为空
       table_opt_(table_opt),  // 保存表选项
       use_value_delta_encoding_(use_value_delta_encoding),  // 保存值增量编码选项
@@ -932,11 +937,11 @@ OneDRtreeSecondaryIndexBuilder::~OneDRtreeSecondaryIndexBuilder() {  // 析构�
 }
 
 void OneDRtreeSecondaryIndexBuilder::MakeNewSubIndexBuilder() {  // 创建新的子索引构建器
-  assert(sub_index_builder_ == nullptr);  // 断言当前没有子索引构建器
+  assert(sub_index_builder_ == nullptr);
   sub_index_builder_ = new OneDRtreeSecondaryIndexLevelBuilder(  // 创建新的一维R树辅助索引层级构建器
-      comparator_, table_opt_.index_block_restart_interval,  // 使用比较器和重启间隔
-      table_opt_.format_version, use_value_delta_encoding_,  // 格式版本和增量编码选项
-      table_opt_.index_shortening, /* include_first_key */ false);  // 索引缩短模式，不包含首键
+      comparator_, table_opt_.index_block_restart_interval,  // 1
+      table_opt_.format_version, use_value_delta_encoding_,
+      table_opt_.index_shortening, /* include_first_key */ false);
 
   flush_policy_.reset(FlushBlockBySizePolicyFactory::NewFlushBlockPolicy(  // 重置刷新策略
       table_opt_.metadata_block_size, table_opt_.block_size_deviation,  // 元数据块大小(512)和偏差(10)
@@ -951,7 +956,7 @@ void OneDRtreeSecondaryIndexBuilder::RequestPartitionCut() {  // 请求切割分
 void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\block_based\block_based_table_builder.cc调用的
     Slice val_temp = Slice(value);  // 创建值的临时切片
     std::vector<Slice> extracted_values;
-    WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值
+    WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值，value_temp是包含所有属性
     double numerical_val = *reinterpret_cast<const double*>(extracted_values[0].data());  // 将值的前8字节解释为double类型的数值（一维辅助索引基于数值构建）
     ValueRange temp_val_range;  // 创建临时值范围对象
     temp_val_range.set_range(numerical_val, numerical_val);  // 传入一个min，一个max
@@ -959,7 +964,7 @@ void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\
     tuple_valranges_.emplace_back(temp_val_range);
 }
 
-void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table\block_based\block_based_table_builder.cc调用的
+void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table\block_based\block_based_table_builder.cc调用的，data block满了才会调用
     std::string* last_key_in_current_block,  // 当前数据块的最后一个key，注意是key，不是value
     const Slice* first_key_in_next_block, const BlockHandle& block_handle) {  // 当前数据块的句柄
   (void) first_key_in_next_block;  // 不需要
@@ -1033,9 +1038,9 @@ void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bo
             {serializeValueRange(enclosing_valrange_),  // 包围值范围作为索引键
              std::unique_ptr<OneDRtreeSecondaryIndexLevelBuilder>(sub_index_builder_),  // 子索引构建器
              sec_valranges_});  // 在一维的情况下，这个参数和第一个参数实际上是一样的
-        sec_valranges_.clear();  // 清空辅助值范围列表
-        enclosing_valrange_.clear();  // 清空包围值范围
-        sub_index_builder_ = nullptr;  // 重置子索引构建器（对应算法第14行：SB ← ∅; 创建新辅助索引块）
+        sec_valranges_.clear();
+        enclosing_valrange_.clear();
+        sub_index_builder_ = nullptr;  // 重置子索引构建器
       }
     }
     if (sub_index_builder_ == nullptr) {  // 如果子索引构建器为空
@@ -1153,7 +1158,7 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     // std::cout << "next_level_entries_ size: " << next_level_entries_.size() << std::endl;
     if (next_level_entries_.size() == 1) {  // 如果下一层只有一个条目（R树已到根节点）
       Entry& entry = next_level_entries_.front();  // 获取唯一的条目
-      auto s = entry.value->Finish(index_blocks);  // 完成该条目的索引块写入
+      auto s = entry.value->Finish(index_blocks);  // 调用子索引构建器的Finish()，本质上调用BlockBuilder的Finish()
       // std::cout << "writing the top-level index block with enclosing valuerange: " << ReadValueRange(entry.key) << std::endl;
       index_size_ += index_blocks->index_block_contents.size();  // 累加索引大小
       PutVarint32(&rtree_height_str_, rtree_level_);  // 记录R树高度
@@ -1169,7 +1174,7 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
       // std::cout << "add new item to entries: " << ReadQueryMbr(it->key) << std::endl;
     }
 
-    Entry& entry = entries_.front();  // 获取第一个条目
+    Entry& entry = entries_.front();
     auto s = entry.value->Finish(index_blocks);  // 完成该条目的索引块写入
     // std::cout << "writing an index block to disk with enclosing MBR: " << ReadSecQueryMbr(entry.key) << std::endl;
     index_size_ += index_blocks->index_block_contents.size();  // 累加索引大小
@@ -1186,11 +1191,10 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     // index_size_ += top_level_index_size_;
     // return Status::OK();
   } else {  // entries_中还有条目需要处理
-    // Finish the next partition index in line and Incomplete() to indicate we
-    // expect more calls to Finish
-    Entry& entry = entries_.front();  // 【关键】获取entries_中的第一个条目
 
-    auto s = entry.value->Finish(index_blocks);
+    Entry& entry = entries_.front();
+
+    auto s = entry.value->Finish(index_blocks); // 调用BlockBuilder的Finish()
     // std::cout << "writing an index block to disk with enclosing MBR: " << ReadSecQueryMbr(entry.key) << std::endl;
     index_size_ += index_blocks->index_block_contents.size();  // 累加索引大小
     finishing_indexes = true;  // 标记正在完成索引
@@ -1205,6 +1209,73 @@ void OneDRtreeSecondaryIndexBuilder::get_Secondary_Entries( // 一维情况下�
   std::vector<std::pair<std::string, BlockHandle>>* sec_entries) {
     *sec_entries = sec_entries_;
     sec_entries_.clear();
+}
+
+BtreeSecondaryIndexBuilder* BtreeSecondaryIndexBuilder::CreateIndexBuilder(  // 创建B树辅助索引构建器的工厂方法
+    const InternalKeyComparator* comparator,  // 内部键比较器
+    const bool use_value_delta_encoding,  // 是否使用值增量编码
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns,
+    bool is_embedded) {
+  return new BtreeSecondaryIndexBuilder(comparator, table_opt,  // 返回新创建的B树辅助索引构建器实例
+                                     use_value_delta_encoding,
+                                     sec_index_columns,
+                                     is_embedded);
+}
+
+BtreeSecondaryIndexBuilder::BtreeSecondaryIndexBuilder(  // 构造函数
+    const InternalKeyComparator* comparator,
+    const BlockBasedTableOptions& table_opt,
+    const bool use_value_delta_encoding,
+    const std::vector<Slice>& sec_index_columns,
+    bool is_embedded)
+    : SecondaryIndexBuilder(comparator),
+      index_block_builder_(table_opt.index_block_restart_interval,  // 初始化索引块构建器
+                           true /*use_delta_encoding*/,  // 启用增量编码
+                           use_value_delta_encoding),  // 值增量编码选项
+      table_opt_(table_opt),  // 保存表选项
+      use_value_delta_encoding_(use_value_delta_encoding),  // 保存值增量编码选项
+      sec_index_columns_(sec_index_columns),
+      is_embedded_(is_embedded) {}  // 是否嵌入SST
+
+BtreeSecondaryIndexBuilder::~BtreeSecondaryIndexBuilder() {}  // 析构函数
+
+void BtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\block_based\block_based_table_builder.cc调用的
+    Slice val_temp = Slice(value);  // 创建值的临时切片
+    std::vector<Slice> extracted_values;
+    WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值，value_temp是包含所有属性
+    data_values_.emplace_back(extracted_values[0]);
+}
+
+void BtreeSecondaryIndexBuilder::AddIndexEntry( // data block满了才会调用
+    std::string* last_key_in_current_block,
+    const Slice* first_key_in_next_block, const BlockHandle& block_handle) {
+  std::string datablcoklastkeystr = std::string(*last_key_in_current_block);
+  for (const double& v: data_values_) {
+    DataBlockEntry dbe;
+    dbe.datablockhandle = block_handle;
+    dbe.datablocklastkey = datablcoklastkeystr;
+    dbe.sec_value = serializeSecValues(v);
+    data_block_entries_.push_back(dbe);
   }
+  data_values_.clear();
+}
+
+void BtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool last) {
+  if (is_embedded_) {
+    
+  } else {
+    sec_entries_.emplace_back(std::make_pair(datablkentry.sec_value, datablkentry.datablockhandle));
+  }
+}
+
+Status BtreeSecondaryIndexBuilder::Finish(
+    IndexBlocks* index_blocks, const BlockHandle& last_partition_block_handle) {
+  if (is_embedded_) {
+
+  } else {
+
+  }
+}
 
 }  // namespace ROCKSDB_NAMESPACE

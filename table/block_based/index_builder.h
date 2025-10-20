@@ -126,7 +126,7 @@ class SecondaryIndexBuilder {
   //  2. (Optional) a set of metablocks that contains the metadata of the
   //     primary index.
   struct IndexBlocks {
-    Slice index_block_contents;
+    Slice index_block_contents; // 单个二级索引块的全部内容，508B
     std::unordered_map<std::string, Slice> meta_blocks;
   };
   explicit SecondaryIndexBuilder(const InternalKeyComparator* comparator)
@@ -1068,7 +1068,7 @@ class OneDRtreeSecondaryIndexLevelBuilder : public SecondaryIndexBuilder {
 
   virtual void AddIndexEntry(std::string* last_key_in_current_block,
                              const Slice* first_key_in_next_block,
-                             const BlockHandle& block_handle) override {
+                             const BlockHandle& block_handle) override {  // 这个是重写了父类的方法，但是没有被使用，和下面那个函数一模一样
     // Encode the block handle and construct leaf node
     // std::string handle_encoding;
     // block_handle.EncodeTo(&handle_encoding);
@@ -1244,7 +1244,7 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   std::vector<ValueRange> tuple_valranges_; // for secondary index building
   std::vector<std::pair<std::string, BlockHandle>> sec_entries_; // for secondary global index
 
-  BlockBuilder index_block_builder_;              // top-level index builder
+  BlockBuilder index_block_builder_;  // 没有被使用
   // the active partition index builder
   OneDRtreeSecondaryIndexLevelBuilder* sub_index_builder_;
   // the last key in the active partition index builder
@@ -1262,7 +1262,7 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   bool cut_filter_block = false;
   BlockHandle last_encoded_handle_;
   ValueRange sub_index_enclosing_valrange_;
-  ValueRange enclosing_valrange_; // 粗粒度（整个子索引块的总范围）
+  ValueRange enclosing_valrange_; // 粗粒度（整个子索引块的总范围）512B
   ValueRange sec_enclosing_valrange_;
   std::vector<std::string> sec_valranges_;  // 细粒度（满足条件下，子索引块内部的多个小范围）
   ValueRange temp_sec_valrange_;
@@ -1284,4 +1284,61 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   }
 };
 
+class BtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
+ public:
+  static BtreeSecondaryIndexBuilder* CreateIndexBuilder(
+    const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
+    const bool use_value_delta_encoding,
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns,
+    const bool is_embedded = true); // return new BtreeSecondaryIndexBuilder
+
+  explicit BtreeSecondaryIndexBuilder(const InternalKeyComparator* comparator,
+                                 const BlockBasedTableOptions& table_opt,
+                                 const bool use_value_delta_encoding,
+                                 const std::vector<Slice>& sec_index_columns,
+                                 const bool is_embedded);  // 构造函数
+  virtual ~BtreeSecondaryIndexBuilder();
+
+  virtual void OnKeyAdded(const Slice& value) override;
+
+  virtual void AddIndexEntry(std::string* last_key_in_current_block,
+                             const Slice* first_key_in_next_block,
+                             const BlockHandle& block_handle) override;
+
+  
+  virtual Status Finish(
+      IndexBlocks* index_blocks,
+      const BlockHandle& last_partition_block_handle) override;
+
+  virtual size_t IndexSize() const override { return index_size_; }
+  void get_Secondary_Entries(std::vector<std::pair<std::string, BlockHandle>>* sec_entries) override;
+
+  bool IsEmbedded() const { return is_embedded_; }
+
+ private:
+  struct DataBlockEntry {
+    BlockHandle datablockhandle;
+    std::string datablocklastkey;
+    std::string sec_value;
+  };
+  std::list<DataBlockEntry> data_block_entries_;
+
+  void AddIdxEntry(DataBlockEntry datablkentry, bool last=false);
+  
+  std::string serializeSecValues(const double& sec_values) {
+    std::string serialized;
+    serialized.append(reinterpret_cast<const char*>(&sec_values), sizeof(sec_values));
+    return serialized;
+  }
+
+  const BlockBasedTableOptions& table_opt_;
+  bool use_value_delta_encoding_;
+  std::vector<std::pair<std::string, BlockHandle>> sec_entries_; // for secondary global index
+  std::vector<Slice> sec_index_columns_; // 用户指定的二级索引列
+  bool is_embedded_; // 是否是嵌入式二级索引
+
+  BlockBuilder index_block_builder_;
+  std::vector<double> data_values_;
+};
 }  // namespace ROCKSDB_NAMESPACE

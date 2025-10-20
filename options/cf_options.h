@@ -180,6 +180,7 @@ struct MutableCFOptions {
         create_global_sec_index(options.create_global_sec_index),
         global_sec_index_loc(options.global_sec_index_loc),
         global_sec_index_is_spatial(options.global_sec_index_is_spatial),
+        global_sec_index_is_btree(options.global_sec_index_is_btree),
         sec_index_columns(options.sec_index_columns) {
     RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
@@ -231,6 +232,7 @@ struct MutableCFOptions {
         create_global_sec_index(false),
         global_sec_index_loc(nullptr),
         global_sec_index_is_spatial(true),
+        global_sec_index_is_btree(false),
         sec_index_columns({Slice("area")}) {}
 
   explicit MutableCFOptions(const Options& options);
@@ -328,6 +330,8 @@ struct MutableCFOptions {
   bool create_global_sec_index;
   char* global_sec_index_loc;
   bool global_sec_index_is_spatial;
+
+  bool global_sec_index_is_btree;
 
   std::vector<Slice> sec_index_columns;
 
