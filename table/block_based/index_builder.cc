@@ -14,6 +14,7 @@
 #include <cinttypes>
 #include <list>
 #include <string>
+#include <fstream>
 
 #include "db/dbformat.h"
 #include "rocksdb/comparator.h"
@@ -975,7 +976,7 @@ void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table\block_based\block_b
 
 
 void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool last) {  // 将数据块条目添加到辅助索引（对应算法第8-10行）
-  expandValrange(enclosing_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 扩展包围值范围以包含当前条目的值范围
+  expandValrange(enclosing_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 把第二个参数解析出来，让第一个参数拓展
   // std::cout << "enclosing_mbr_: " << enclosing_mbr_ << std::endl;
   // Note: to avoid two consecuitive flush in the same method call, we do not
   // check flush policy when adding the last key
@@ -1080,6 +1081,19 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     // AddIdxEntry(last_index_entry_, true);
     // std::cout << "count number: " << count << std::endl;
     // std::cout << "entries_ size: " << entries_.size() << std::endl;
+
+    std::ofstream entries_file;
+    entries_file.open("/NV1/ysh/NEXT/examples/testdb/entries_keys_collection.txt", std::ios::app);  // 以追加模式打开文件
+    entries_file << "=== New SST - Total entries: " << entries_.size() << " ===" << std::endl;
+    
+    for (const Entry& entry : entries_) {
+      // 反序列化key为ValueRange
+      ValueRange vr = ReadValueRange(Slice(entry.key));
+      entries_file  <<  vr.range.min 
+                   << " " << vr.range.max << std::endl;
+    }
+    entries_file << std::endl;  // 添加空行分隔不同的SST
+    entries_file.close();
   }
   
   if (partition_cnt_ == 0) {  // 如果分区计数为0

@@ -175,4 +175,4 @@ int main(int argc, char** argv) {
 // ./bplustree/bplustree_insert 30000000 1000000 random /NV1/ysh/NEXT/examples/bplustree/global_bptree 1
 // ./bplustree/bplustree_insert 30000000 7000000 random /NV1/ysh/NEXT/examples/bplustree/global_bptree 2
 // ./bplustree/bplustree_insert 3000000 200000 random /NV1/ysh/NEXT/examples/bplustree/global_bptree 1
-// ./bplustree/bplustree_insert 3000000 200000 random /NV1/ysh/NEXT/examples/bplustree/global_bptree 2
+// ./bplustree/bplustree_insert 1000000 60000 random /NV1/ysh/NEXT/examples/bplustree/global_bptree 2
