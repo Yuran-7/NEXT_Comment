@@ -1695,17 +1695,20 @@ void BlockBasedTableBuilder::WriteSecIndexBlock(
   }
   
   if (rep_->table_options.create_secondary_index == true) {
-    SecondaryIndexBuilder::IndexBlocks sec_index_blocks; 
-    BlockHandle sec_index_block_handle;
-
-        // 动态类型转换，因为 IsEmbedded 是 BtreeSecondaryIndexBuilder 的特定方法
+    // 检查是否是非嵌入式 B-tree 二级索引
     auto* btree_sec_index_builder =
         dynamic_cast<BtreeSecondaryIndexBuilder*>(rep_->sec_index_builder.get());
-
-    if (!btree_sec_index_builder || btree_sec_index_builder->IsEmbedded()) {
-      // 辅助索引构建器不存在，或者它是嵌入式的，直接返回
+    
+    if (btree_sec_index_builder && !btree_sec_index_builder->IsEmbedded()) {
+      // 非嵌入式模式：不需要写入 SST，只需调用 Finish 完成数据转换
+      SecondaryIndexBuilder::IndexBlocks sec_index_blocks;
+      rep_->sec_index_builder->Finish(&sec_index_blocks);
       return;
     }
+    
+    // 嵌入式模式或其他类型的二级索引：继续正常流程
+    SecondaryIndexBuilder::IndexBlocks sec_index_blocks; 
+    BlockHandle sec_index_block_handle;
     
     // 第一次调用Finish
     auto sec_index_builder_status = rep_->sec_index_builder->Finish(&sec_index_blocks);
