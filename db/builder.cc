@@ -26,6 +26,7 @@
 #include "file/filename.h"
 #include "file/read_write_util.h"
 #include "file/writable_file_writer.h"
+#include "logging/logging.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_util.h"
 #include "options/options_helper.h"
@@ -273,6 +274,7 @@ Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使�
       s = builder->Finish();
       if (tboptions.ioptions.global_sec_index) {
         std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
+        ROCKS_LOG_INFO(db_options.info_log, "获取OneDRtreeSecondaryIndexBuilder成员变量sec_entries_，并将其赋值给FileMetaData的成员变量SecValrange");
         builder->GetSecondaryEntries(&secondary_index_entries); // 最终获取OneDRtreeSecondaryIndexBuilder成员变量sec_entries_
         s = meta->UpdateSecEntries(secondary_index_entries);  // 将secondary_index_entries赋值给FileMetaData的成员变量SecValrange和SecondaryEntries
         secondary_index_entries.clear();

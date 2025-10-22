@@ -6213,7 +6213,7 @@ Status VersionSet::Recover(
                                const_cast<VersionSet*>(this),
                                /*track_missing_files=*/false,
                                /*no_error_if_files_missing=*/false, io_tracer_);
-    handler.Iterate(reader, &log_read_status);
+    handler.Iterate(reader, &log_read_status);  // 和下面的VersionSet::CreateColumnFamily()关联起来
     s = handler.status();
     if (s.ok()) {
       log_number = handler.GetVersionEditParams().log_number_;
@@ -6227,7 +6227,7 @@ Status VersionSet::Recover(
     manifest_file_size_ = current_manifest_file_size;
     ROCKS_LOG_INFO(
         db_options_->info_log,
-        "Recovered from manifest file:%s succeeded,"
+        "VersionSet的Recover函数 Recovered from manifest file:%s succeeded,"
         "manifest_file_number is %" PRIu64 ", next_file_number is %" PRIu64
         ", last_sequence is %" PRIu64 ", log_number is %" PRIu64
         ",prev_log_number is %" PRIu64 ",max_column_family is %" PRIu32
@@ -7401,6 +7401,7 @@ ColumnFamilyData* VersionSet::CreateColumnFamily(
   AppendVersion(new_cfd, v);
   // GetLatestMutableCFOptions() is safe here without mutex since the
   // cfd is not available to client
+  ROCKS_LOG_INFO(db_options_->info_log, "无论是新创建的数据库还是旧的，都会在这里创建Memtable");
   new_cfd->CreateNewMemtable(*new_cfd->GetLatestMutableCFOptions(),
                              LastSequence());
   new_cfd->SetLogNumber(edit->log_number_);

@@ -174,6 +174,7 @@ struct FileMetaData {
   Mbr mbr;                         // MBR of the SST file
   SpatialSketch sketch;            // spatial sketch of the SST file for cost estimation
   std::vector<std::pair<ValueRange, BlockHandle>> SecValrange;             // numerical value range of SST file for secondary attribute
+  std::vector<std::pair<double, BlockHandle>> SecVal;  // IIDs of the leaf nodes of the per file secondary index
   std::vector<std::pair<Mbr, BlockHandle>> SecondaryEntries;  // MBR of the leaf nodes of the per file secondary index
  
   // Needs to be disposed when refs becomes 0.

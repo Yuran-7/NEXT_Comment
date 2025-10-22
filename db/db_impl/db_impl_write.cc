@@ -2012,9 +2012,11 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
       for (auto* cfd : cfds) {
         FlushRequest flush_req;
         GenerateFlushRequest({cfd}, &flush_req);
-        SchedulePendingFlush(flush_req, FlushReason::kWriteBufferFull); // 将flush请求加入队列
+        SchedulePendingFlush(flush_req, FlushReason::kWriteBufferFull); // 将flush请求加入 flush_queue_，unscheduled_flushes_++
       }
     }
+    ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                   "ScheduleFlushes函数执行MaybeScheduleFlushOrCompaction:.\n");
     MaybeScheduleFlushOrCompaction(); // 调度后台线程
   }
   return status;
@@ -2104,7 +2106,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
     context->superversion_context.NewSuperVersion();
   }
   ROCKS_LOG_INFO(immutable_db_options_.info_log,
-                 "[%s] New memtable created with log file: #%" PRIu64
+                 "SwitchMemtable函数 [%s] New memtable created with log file: #%" PRIu64
                  ". Immutable memtables: %d.\n",
                  cfd->GetName().c_str(), new_log_number, num_imm_unflushed);
   // There should be no concurrent write as the thread is at the front of
@@ -2235,7 +2237,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
 
   cfd->mem()->SetNextLogNumber(logfile_number_);
   assert(new_mem != nullptr);
-  cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
+  cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);  // 添加
   new_mem->Ref();
   cfd->SetMemtable(new_mem);
   InstallSuperVersionAndScheduleWork(cfd, &context->superversion_context,

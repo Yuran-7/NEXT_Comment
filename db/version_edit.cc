@@ -31,10 +31,12 @@ uint64_t PackFileNumberAndPathId(uint64_t number, uint64_t path_id) {
 
 Status FileMetaData::UpdateSecEntries(std::vector<std::pair<std::string, BlockHandle>>& SecEntries) {
 
-  for(const std::pair<std::string, BlockHandle>& se : SecEntries){
+  for(const std::pair<std::string, BlockHandle>& se : SecEntries) {
     // std::cout << "sec entries size: " << se.first.size() << std::endl;
     BlockHandle blkhandle = se.second;
-    if (se.first.size() == 16) {
+    if (se.first.size() == 8) {
+      SecVal.emplace_back(std::make_pair(*reinterpret_cast<const double*>(se.first.data()), blkhandle));
+    } else if (se.first.size() == 16) {
       // std::cout << "update value range" << std::endl;
       ValueRange blockvalrange = ReadValueRange(se.first);
       SecValrange.emplace_back(std::make_pair(blockvalrange, blkhandle));

@@ -975,10 +975,10 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
         if (r->IsParallelCompressionEnabled()) {  // 如果启用了并行压缩
           r->pc_rep->curr_block_keys->Clear();  // 清空当前块的键列表
         } else {  // 否则立即添加索引条目
-          r->index_builder->AddIndexEntry(&r->last_key, &key,  // 如果要刷盘
-                                          r->pending_handle);
-          if (r->table_options.create_secondary_index) {  // 如果需要创建辅助索引
-            r->sec_index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);  // 如果要刷盘
+          r->index_builder->AddIndexEntry(&r->last_key, &key,
+                                          r->pending_handle); // r->pending_handle被Flush()赋值
+          if (r->table_options.create_secondary_index) {
+            r->sec_index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);  // 刷盘才需要执行
           }
         }
       }
@@ -1697,7 +1697,7 @@ void BlockBasedTableBuilder::WriteSecIndexBlock(
   if (rep_->table_options.create_secondary_index == true) {
     // 检查是否是非嵌入式 B-tree 二级索引
     auto* btree_sec_index_builder =
-        dynamic_cast<BtreeSecondaryIndexBuilder*>(rep_->sec_index_builder.get());
+        dynamic_cast<BtreeSecondaryIndexBuilder*>(rep_->sec_index_builder.get()); // 如果类型不匹配，返回nullptr
     
     if (btree_sec_index_builder && !btree_sec_index_builder->IsEmbedded()) {
       // 非嵌入式模式：不需要写入 SST，只需调用 Finish 完成数据转换
@@ -2150,7 +2150,7 @@ Status BlockBasedTableBuilder::Finish() {
   MetaIndexBuilder meta_index_builder;
   WriteFilterBlock(&meta_index_builder);
   // auto start = std::chrono::high_resolution_clock::now();
-  WriteIndexBlock(&meta_index_builder, &index_block_handle);
+  WriteIndexBlock(&meta_index_builder, &index_block_handle);  // index_block_handle是需要获取的参数，如果索引类型是 kTwoLevelIndexSearch，最终指向顶层索引（Top-level Index）
   // auto end = std::chrono::high_resolution_clock::now();
   WriteSecIndexBlock(&meta_index_builder);
   // auto end2 = std::chrono::high_resolution_clock::now();
@@ -2251,7 +2251,7 @@ void BlockBasedTableBuilder::SetSeqnoTimeTableProperties(
 void BlockBasedTableBuilder::GetSecondaryEntries(
   std::vector<std::pair<std::string, BlockHandle>>* sec_entries) {
   std::vector<std::pair<std::string, BlockHandle>> secondary_entries;
-  rep_->sec_index_builder->get_Secondary_Entries(&secondary_entries);
+  rep_->sec_index_builder->get_Secondary_Entries(&secondary_entries); // table/block_based/index_builder.cc，904行
   *sec_entries = secondary_entries;
   secondary_entries.clear();
 }

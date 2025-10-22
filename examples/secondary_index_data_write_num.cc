@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
     options.sec_comparator = &sec_cmp;
 
     options.info_log_level = DEBUG_LEVEL;
-    options.statistics = rocksdb::CreateDBStatistics();
+    // options.statistics = rocksdb::CreateDBStatistics();
 
     options.max_write_buffer_number = 5;  // 可变MemTable：1个（固定） + 不可变MemTable：4个（可变）
     options.max_background_jobs = 8;   // max_flushes = 2, max_compactions = 6
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
     options.write_buffer_size = 64 * 1024 * 1024;
     
     // Disable compression for all levels
-    options.compression = rocksdb::kNoCompression;
+    options.compression = rocksdb::kNoCompression;  // 没有执行压缩
     options.bottommost_compression = rocksdb::kNoCompression;
 
     Status s;

@@ -267,7 +267,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 
 #ifndef ROCKSDB_LITE
   periodic_task_functions_.emplace(PeriodicTaskType::kDumpStats,
-                                   [this]() { this->DumpStats(); });
+                                   [this]() { this->DumpStats(); });  // 添加周期性任务  
   periodic_task_functions_.emplace(PeriodicTaskType::kPersistStats,
                                    [this]() { this->PersistStats(); });
   periodic_task_functions_.emplace(PeriodicTaskType::kFlushInfoLog,
@@ -286,8 +286,8 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 
   DumpRocksDBBuildVersion(immutable_db_options_.info_log.get());
   DumpDBFileSummary(immutable_db_options_, dbname_, db_session_id_);
-  immutable_db_options_.Dump(immutable_db_options_.info_log.get());
-  mutable_db_options_.Dump(immutable_db_options_.info_log.get());
+  // immutable_db_options_.Dump(immutable_db_options_.info_log.get());
+  // mutable_db_options_.Dump(immutable_db_options_.info_log.get());
   DumpSupportInfo(immutable_db_options_.info_log.get());
 
   max_total_wal_size_.store(mutable_db_options_.max_total_wal_size,
@@ -783,7 +783,7 @@ const Status DBImpl::CreateArchivalDirectory() {
 }
 
 void DBImpl::PrintStatistics() {
-  auto dbstats = immutable_db_options_.stats;
+  auto dbstats = immutable_db_options_.stats; // 这个是设置了才有，options.statistics = rocksdb::CreateDBStatistics(); 
   if (dbstats) {
     ROCKS_LOG_INFO(immutable_db_options_.info_log, "STATISTICS:\n %s",
                    dbstats->ToString().c_str());
@@ -811,10 +811,10 @@ Status DBImpl::StartPeriodicTaskScheduler() {
 
 #endif  // !NDEBUG
   if (mutable_db_options_.stats_dump_period_sec > 0) {
-    Status s = periodic_task_scheduler_.Register(
+    Status s = periodic_task_scheduler_.Register( // 注册周期性任务
         PeriodicTaskType::kDumpStats,
         periodic_task_functions_.at(PeriodicTaskType::kDumpStats),
-        mutable_db_options_.stats_dump_period_sec);
+        mutable_db_options_.stats_dump_period_sec); // 默认600秒
     if (!s.ok()) {
       return s;
     }
@@ -823,7 +823,7 @@ Status DBImpl::StartPeriodicTaskScheduler() {
     Status s = periodic_task_scheduler_.Register(
         PeriodicTaskType::kPersistStats,
         periodic_task_functions_.at(PeriodicTaskType::kPersistStats),
-        mutable_db_options_.stats_persist_period_sec);
+        mutable_db_options_.stats_persist_period_sec);  // 默认600秒
     if (!s.ok()) {
       return s;
     }
@@ -1047,6 +1047,7 @@ Status DBImpl::GetStatsHistory(
 }
 
 void DBImpl::DumpStats() {
+  ROCKS_LOG_INFO(immutable_db_options_.info_log, "统计信息打印来自DBImpl::DumpStats");
   TEST_SYNC_POINT("DBImpl::DumpStats:1");
 #ifndef ROCKSDB_LITE
   std::string stats;
@@ -1067,7 +1068,7 @@ void DBImpl::DumpStats() {
       }
     }
 
-    const std::string* property = &DB::Properties::kDBStats;
+    const std::string* property = &DB::Properties::kDBStats;  // 收集DB级别统计信息
     const DBPropertyInfo* property_info = GetPropertyInfo(*property);
     assert(property_info != nullptr);
     assert(!property_info->need_out_of_mutex);
@@ -1078,7 +1079,7 @@ void DBImpl::DumpStats() {
     property_info = GetPropertyInfo(*property);
     assert(property_info != nullptr);
     assert(!property_info->need_out_of_mutex);
-    for (auto cfd : *versions_->GetColumnFamilySet()) {
+    for (auto cfd : *versions_->GetColumnFamilySet()) { // 收集每个列簇的统计信息
       if (cfd->initialized()) {
         cfd->internal_stats()->GetStringProperty(*property_info, *property,
                                                  &stats);
@@ -1100,7 +1101,7 @@ void DBImpl::DumpStats() {
   ROCKS_LOG_INFO(immutable_db_options_.info_log,
                  "------- DUMPING STATS -------");
   ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s", stats.c_str());
-  if (immutable_db_options_.dump_malloc_stats) {
+  if (immutable_db_options_.dump_malloc_stats) {  // 默认是false
     stats.clear();
     DumpMallocStats(&stats);
     if (!stats.empty()) {
@@ -1112,6 +1113,7 @@ void DBImpl::DumpStats() {
 #endif  // !ROCKSDB_LITE
 
   PrintStatistics();
+    ROCKS_LOG_INFO(immutable_db_options_.info_log, "DumpStats函数结束");
 }
 
 // Periodically flush info log out of application buffer at a low frequency.

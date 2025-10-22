@@ -23,7 +23,7 @@ struct ImmutableCFOptions {
  public:
   static const char* kName() { return "ImmutableCFOptions"; }
   explicit ImmutableCFOptions();
-  explicit ImmutableCFOptions(const ColumnFamilyOptions& cf_options);
+  explicit ImmutableCFOptions(const ColumnFamilyOptions& cf_options);   // 构造函数在options/cf_options.cc中定义
 
   CompactionStyle compaction_style;
 
@@ -92,6 +92,8 @@ struct ImmutableCFOptions {
   bool global_sec_index;
   char* global_index_loc;
   bool global_sec_index_is_spatial;
+
+  bool global_sec_index_is_btree;
 };
 
 struct ImmutableOptions : public ImmutableDBOptions, public ImmutableCFOptions {

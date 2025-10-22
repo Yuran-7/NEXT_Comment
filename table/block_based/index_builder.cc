@@ -1275,6 +1275,7 @@ void BtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\bloc
 void BtreeSecondaryIndexBuilder::AddIndexEntry( // data block满了才会调用
     std::string* last_key_in_current_block,
     const Slice* first_key_in_next_block, const BlockHandle& block_handle) {
+  (void) first_key_in_next_block;  // 避免报错
   std::string datablcoklastkeystr = std::string(*last_key_in_current_block);
   for (const double& v: data_values_) {
     DataBlockEntry dbe;
@@ -1354,7 +1355,7 @@ void BtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool l
 
 Status BtreeSecondaryIndexBuilder::Finish(
     IndexBlocks* index_blocks, const BlockHandle& last_partition_block_handle) {
-  
+  (void) last_partition_block_handle; // 避免报错
   if (is_embedded_) {
     // 嵌入式模式：需要把二级索引插入 SST
     
@@ -1368,6 +1369,10 @@ Status BtreeSecondaryIndexBuilder::Finish(
         double b_val = *reinterpret_cast<const double*>(b.sec_value.data());
         return a_val < b_val;  // 升序排序
       });
+
+      for (const auto& entry : data_block_entries_) {
+        sec_entries_.emplace_back(std::make_pair(entry.sec_value, entry.datablockhandle));
+      }   
       
       // 遍历排序后的条目，调用 AddIdxEntry
       std::list<DataBlockEntry>::iterator it;

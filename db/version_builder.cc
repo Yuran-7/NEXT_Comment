@@ -746,6 +746,28 @@ class VersionBuilder::Rep {
     return meta->SecValrange;
   }  
 
+  std::vector<std::pair<double, BlockHandle>> GetSecValForTableFile(int level,
+                        uint64_t file_number) const {
+    assert(level < num_levels_);
+
+    const auto& added_files = levels_[level].added_files;
+
+    auto it = added_files.find(file_number);
+    if (it != added_files.end()) {
+      const FileMetaData* const meta = it->second;
+      assert(meta);
+
+      return meta->SecVal;
+    }
+
+    assert(base_vstorage_);
+    const FileMetaData* const meta =
+        base_vstorage_->GetFileMetaDataByNumber(file_number);
+    assert(meta);
+
+    return meta->SecVal;
+  }
+
   Status ApplyFileDeletion(int level, uint64_t file_number) {
     assert(level != VersionStorageInfo::FileLocation::Invalid().GetLevel());
 
@@ -1109,8 +1131,19 @@ class VersionBuilder::Rep {
 
       // if global rtree is activated
       // remove entry from global rtree for each deleted files
-      if(ioptions_->global_sec_index) { //ImmutableCFOptions，定义在
-        if (!ioptions_->global_sec_index_is_spatial){ // 一维
+      if (ioptions_->global_sec_index) { //ImmutableCFOptions，定义在        
+        if (ioptions_->global_sec_index_is_btree) {
+          const std::vector<std::pair<double, BlockHandle>> file_secentries_num = GetSecValForTableFile(level, file_number);
+          int globla_sec_id = 0;
+          for (const std::pair<double, BlockHandle>& entry: file_secentries_num) {
+            double entryvalrange = entry.first;
+            Rect1D tuplerect_num(entryvalrange, entryvalrange); // TODO
+            BlockHandle entryblkhandle_num = entry.second;
+            GlobalSecIndexValue sec_index_val_num(globla_sec_id, file_number, entryblkhandle_num);
+            global_rtee_p->Remove(tuplerect_num.min, tuplerect_num.max, sec_index_val_num);
+            globla_sec_id++;
+          }
+        } else if (!ioptions_->global_sec_index_is_spatial) { // 一维
           // const ValueRange valrange = GetValRangeForTableFile(level, file_number);
           // Rect1D filerect(valrange.range.min, valrange.range.max);
           // global_rtree.Remove(filerect.min, filerect.max, std::make_pair(level, file_number));
@@ -1168,7 +1201,10 @@ class VersionBuilder::Rep {
       // 索引值(GlobalSecIndexValue)：包含索引ID、文件号、BlockHandle
       if(ioptions_->global_sec_index) {
         const uint64_t filenumber = meta.fd.GetNumber();
-        if (!ioptions_->global_sec_index_is_spatial) {  // 一维R树（数值型二级索引）
+        if (ioptions_->global_sec_index_is_btree) {
+          const std::vector<std::pair<ValueRange, BlockHandle>> file_secentries_num = GetSecValRangeForTableFile(level, filenumber);
+
+        } else if (!ioptions_->global_sec_index_is_spatial) {  // 一维R树（数值型二级索引）
           // ValueRange filevalrange = meta.valrange;
           // Rect1D filerect(filevalrange.range.min, filevalrange.range.max);
           // global_rtree.Insert(filerect.min, filerect.max, std::make_pair(level, filenumber));

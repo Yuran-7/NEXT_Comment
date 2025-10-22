@@ -310,7 +310,7 @@ Status DBImpl::NewDB(std::vector<std::string>* new_filenames) {
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
 
-  ROCKS_LOG_INFO(immutable_db_options_.info_log, "Creating manifest 1 \n");
+  ROCKS_LOG_INFO(immutable_db_options_.info_log, "NewDB() Creating manifest 1 \n");
   const std::string manifest = DescriptorFileName(dbname_, 1);
   {
     if (fs_->FileExists(manifest, IOOptions(), nullptr).ok()) {
@@ -511,7 +511,7 @@ Status DBImpl::Recover(
   Status s;
   bool missing_table_file = false;
   if (!immutable_db_options_.best_efforts_recovery) {
-    s = versions_->Recover(column_families, read_only, &db_id_);  // std::unique_ptr<VersionSet> versions_;成员变量
+    s = versions_->Recover(column_families, read_only, &db_id_);  // 如果数据库是新的，会创建一个 Memtable
   } else {
     assert(!files_in_dbname.empty());
     s = versions_->TryRecover(column_families, read_only, files_in_dbname,
@@ -648,8 +648,10 @@ Status DBImpl::Recover(
       std::sort(wals.begin(), wals.end());
 
       bool corrupted_wal_found = false;
+      ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                     "调用RecoverLogFiles恢复 WAL 日志到 Memtable");
       s = RecoverLogFiles(wals, &next_sequence, read_only, &corrupted_wal_found,
-                          recovery_ctx);
+                          recovery_ctx);  // 关键函数，恢复 WAL 日志到 Memtable
       if (corrupted_wal_found && recovered_seq != nullptr) {
         *recovered_seq = next_sequence;
       }
@@ -1182,7 +1184,9 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
             return status;
           }
           flushed = true;
-
+          ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                         "[%s] Creating new memtable during WAL recovery, seq: %" PRIu64,
+                         cfd->GetName().c_str(), *next_sequence); // 场景: WAL 恢复过程中 Memtable 满了,Flush 后创建新的
           cfd->CreateNewMemtable(*cfd->GetLatestMutableCFOptions(),
                                  *next_sequence); // 构建一个新的空 MemTable
         }
@@ -1320,7 +1324,9 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
             break;
           }
           flushed = true;
-
+          ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                         "[%s] Creating new memtable after final flush during recovery, seq: %" PRIu64,
+                         cfd->GetName().c_str(), versions_->LastSequence());  // 场景: WAL 恢复完成后的最终 Flush
           cfd->CreateNewMemtable(*cfd->GetLatestMutableCFOptions(),
                                  versions_->LastSequence());
         }
@@ -2075,7 +2081,8 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
                    "DB::Open() failed: %s", s.ToString().c_str());
   }
   if (s.ok()) {
-    s = impl->StartPeriodicTaskScheduler();
+    ROCKS_LOG_INFO(impl->immutable_db_options_.info_log, "注册周期性任务调度器");
+    s = impl->StartPeriodicTaskScheduler(); // 启动周期性任务调度器，(db_impl.cc:793-813)，完成注册
   }
 
   if (s.ok()) {
