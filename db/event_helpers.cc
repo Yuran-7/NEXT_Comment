@@ -91,7 +91,7 @@ void EventHelpers::LogAndNotifyTableFileCreationFinished(
     const std::string& file_checksum_func_name) {
   if (s.ok() && event_logger) {
     JSONWriter jwriter;
-    AppendCurrentTime(&jwriter);
+    AppendCurrentTime(&jwriter);  // "time_micros": <current time in micros>
     jwriter << "cf_name" << cf_name << "job" << job_id << "event"
             << "table_file_creation"
             << "file_number" << fd.GetNumber() << "file_size"
@@ -108,6 +108,7 @@ void EventHelpers::LogAndNotifyTableFileCreationFinished(
       // basic properties:
       jwriter << "data_size" << table_properties.data_size << "index_size"
               << table_properties.index_size << "index_partitions"
+              << "sec_data_size" << table_properties.secondary_index_size
               << table_properties.index_partitions << "top_level_index_size"
               << table_properties.top_level_index_size
               << "index_key_is_user_key"

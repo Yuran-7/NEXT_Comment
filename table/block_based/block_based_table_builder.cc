@@ -1799,6 +1799,10 @@ void BlockBasedTableBuilder::WritePropertiesBlock(
             : "";
     rep_->props.index_size =
         rep_->index_builder->IndexSize() + kBlockTrailerSize;
+    rep_->props.secondary_index_size =
+        rep_->sec_index_builder != nullptr 
+            ? rep_->sec_index_builder->IndexSize() + kBlockTrailerSize 
+            : 0;
     rep_->props.comparator_name = rep_->ioptions.user_comparator != nullptr
                                       ? rep_->ioptions.user_comparator->Name()
                                       : "nullptr";

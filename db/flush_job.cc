@@ -873,14 +873,14 @@ Status FlushJob::WriteLevel0Table() {
       total_memory_usage += m->ApproximateMemoryUsage();
     }
 
-    event_logger_->Log() << "job" << job_context_->job_id << "event"
-                         << "flush_started"
-                         << "num_memtables" << mems_.size() << "num_entries"
-                         << total_num_entries << "num_deletes"
-                         << total_num_deletes << "total_data_size"
-                         << total_data_size << "memory_usage"
-                         << total_memory_usage << "flush_reason"
-                         << GetFlushReasonString(cfd_->GetFlushReason());
+    // event_logger_->Log() << "job" << job_context_->job_id << "event"
+    //                      << "flush_started"
+    //                      << "num_memtables" << mems_.size() << "num_entries"
+    //                      << total_num_entries << "num_deletes"
+    //                      << total_num_deletes << "total_data_size"
+    //                      << total_data_size << "memory_usage"
+    //                      << total_memory_usage << "flush_reason"
+    //                      << GetFlushReasonString(cfd_->GetFlushReason());
 
     {
       ScopedArenaIterator iter(

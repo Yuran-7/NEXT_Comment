@@ -84,6 +84,8 @@ std::string TableProperties::ToString(
     AppendProperty(result, "top-level index size", top_level_index_size, prop_delim,
                    kv_delim);
   }
+  AppendProperty(result, "secondary index block size", secondary_index_size, 
+                 prop_delim, kv_delim);
   AppendProperty(result, "filter block size", filter_size, prop_delim,
                  kv_delim);
   AppendProperty(result, "# entries for filter", num_filter_entries, prop_delim,
@@ -181,6 +183,7 @@ void TableProperties::Add(const TableProperties& tp) {
   top_level_index_size += tp.top_level_index_size;
   index_key_is_user_key += tp.index_key_is_user_key;
   index_value_is_delta_encoded += tp.index_value_is_delta_encoded;
+  secondary_index_size += tp.secondary_index_size;
   filter_size += tp.filter_size;
   raw_key_size += tp.raw_key_size;
   raw_value_size += tp.raw_value_size;
@@ -203,6 +206,7 @@ TableProperties::GetAggregatablePropertiesAsMap() const {
   rv["index_size"] = index_size;
   rv["index_partitions"] = index_partitions;
   rv["top_level_index_size"] = top_level_index_size;
+  rv["secondary_index_size"] = secondary_index_size;
   rv["filter_size"] = filter_size;
   rv["raw_key_size"] = raw_key_size;
   rv["raw_value_size"] = raw_value_size;
@@ -268,6 +272,8 @@ const std::string TablePropertiesNames::kIndexKeyIsUserKey =
     "rocksdb.index.key.is.user.key";
 const std::string TablePropertiesNames::kIndexValueIsDeltaEncoded =
     "rocksdb.index.value.is.delta.encoded";
+const std::string TablePropertiesNames::kSecondaryIndexSize =
+    "rocksdb.secondary.index.size";
 const std::string TablePropertiesNames::kFilterSize =
     "rocksdb.filter.size";
 const std::string TablePropertiesNames::kRawKeySize =

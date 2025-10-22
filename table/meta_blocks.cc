@@ -95,6 +95,7 @@ void PropertyBlockBuilder::AddTableProperty(const TableProperties& props) {
   Add(TablePropertiesNames::kIndexKeyIsUserKey, props.index_key_is_user_key);
   Add(TablePropertiesNames::kIndexValueIsDeltaEncoded,
       props.index_value_is_delta_encoded);
+  Add(TablePropertiesNames::kSecondaryIndexSize, props.secondary_index_size);
   Add(TablePropertiesNames::kNumEntries, props.num_entries);
   Add(TablePropertiesNames::kNumFilterEntries, props.num_filter_entries);
   Add(TablePropertiesNames::kDeletedKeys, props.num_deletions);
@@ -278,6 +279,8 @@ Status ReadTablePropertiesHelper(
        &new_table_properties->index_key_is_user_key},
       {TablePropertiesNames::kIndexValueIsDeltaEncoded,
        &new_table_properties->index_value_is_delta_encoded},
+      {TablePropertiesNames::kSecondaryIndexSize,
+       &new_table_properties->secondary_index_size},
       {TablePropertiesNames::kFilterSize, &new_table_properties->filter_size},
       {TablePropertiesNames::kRawKeySize, &new_table_properties->raw_key_size},
       {TablePropertiesNames::kRawValueSize,
