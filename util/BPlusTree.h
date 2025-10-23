@@ -30,6 +30,7 @@ class BPlusTree {
     std::vector<Key> keys;                 // 大小 <= MAX_KEYS
     std::vector<Node*> children;           // 内部节点 children.size() == keys.size() + 1
     std::vector<std::vector<Value>> vals;  // 仅叶子：与 keys 对齐，一个 key 一个 value 向量
+    std::vector<size_t> valid_counts;      // 仅叶子：每个key对应的有效value数量（用于惰性删除）
     Node* next;                            // 叶子顺序链表
     Node* prev;                            // 叶子反向链
 
@@ -37,6 +38,7 @@ class BPlusTree {
       keys.reserve(MAX_KEYS + 1);  // 预留一点空间，便于插入前检测是否需要 split
       if (leaf) {
         vals.reserve(MAX_KEYS + 1);
+        valid_counts.reserve(MAX_KEYS + 1);
       } else {
         children.reserve(MAX_KEYS + 2);
       }
@@ -56,13 +58,103 @@ class BPlusTree {
     Key sep{};
     Node* new_child = nullptr;
     bool split = InsertRec(root_, k, v, &sep, &new_child);
-    if (split) {
+    if (split) {  // 表示根节点发生了分裂
       // 根分裂：新建一层
       Node* new_root = new Node(false);
       new_root->keys.push_back(sep);
       new_root->children.push_back(root_);
       new_root->children.push_back(new_child);
       root_ = new_root;
+    }
+  }
+
+  // 删除特定key的特定value（惰性删除，仅标记为无效，不改变树结构）
+  // 返回：是否成功删除（找到了key和value）
+  bool Delete(const Key& k, const Value& v) {
+    Node* leaf = FindLeafMutable(root_, k);
+    if (!leaf) return false;
+    
+    auto it = std::lower_bound(leaf->keys.begin(), leaf->keys.end(), k);
+    if (it == leaf->keys.end() || Less(k, *it) || Less(*it, k)) {
+      return false;  // key不存在
+    }
+    
+    size_t idx = static_cast<size_t>(it - leaf->keys.begin());
+    auto& values = leaf->vals[idx];
+    
+    // 查找并移除该value（只移除第一个匹配项）
+    for (auto val_it = values.begin(); val_it != values.end(); ++val_it) {
+      if (*val_it == v) {  // 使用 Value 的 operator==
+        values.erase(val_it);
+        leaf->valid_counts[idx] = values.size();
+        
+        // 如果该key的所有value都被删除，延迟清理（可选）
+        if (values.empty()) {
+          // 可以选择立即删除key，或等待Compact时清理
+          // 这里先保留key槽位，Compact时再清理
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 批量删除：删除某key的多个values（用于compaction场景）
+  template <typename Container>
+  size_t BatchDelete(const Key& k, const Container& values_to_delete) {
+    Node* leaf = FindLeafMutable(root_, k);
+    if (!leaf) return 0;
+    
+    auto it = std::lower_bound(leaf->keys.begin(), leaf->keys.end(), k);
+    if (it == leaf->keys.end() || Less(k, *it) || Less(*it, k)) {
+      return 0;
+    }
+    
+    size_t idx = static_cast<size_t>(it - leaf->keys.begin());
+    auto& values = leaf->vals[idx];
+    size_t deleted_count = 0;
+    
+    // 使用std::remove_if批量删除
+    auto new_end = std::remove_if(values.begin(), values.end(),
+      [&values_to_delete, &deleted_count](const Value& v) {
+        for (const auto& to_del : values_to_delete) {
+          if (v == to_del) {  // 使用 Value 的 operator==
+            deleted_count++;
+            return true;
+          }
+        }
+        return false;
+      });
+    values.erase(new_end, values.end());
+    leaf->valid_counts[idx] = values.size();
+    
+    return deleted_count;
+  }
+
+  // 压缩清理：移除所有空key槽位，重建树（可选，用于定期维护）
+  void Compact() {
+    std::vector<std::pair<Key, std::vector<Value>>> all_data;
+    
+    // 收集所有有效数据
+    const Node* leaf = root_;
+    while (leaf && !leaf->is_leaf) leaf = leaf->children.front();
+    while (leaf) {
+      for (size_t i = 0; i < leaf->keys.size(); ++i) {
+        if (!leaf->vals[i].empty()) {
+          all_data.emplace_back(leaf->keys[i], leaf->vals[i]);
+        }
+      }
+      leaf = leaf->next;
+    }
+    
+    // 重建树
+    FreeRec(root_);
+    root_ = new Node(true);
+    
+    for (auto& kv : all_data) {
+      for (const auto& v : kv.second) {
+        Insert(kv.first, v);
+      }
     }
   }
 
@@ -187,6 +279,7 @@ class BPlusTree {
       } else {
         node->keys.insert(node->keys.begin() + static_cast<std::ptrdiff_t>(pos), k);
         node->vals.insert(node->vals.begin() + static_cast<std::ptrdiff_t>(pos), std::vector<Value>{v});
+        node->valid_counts.insert(node->valid_counts.begin() + static_cast<std::ptrdiff_t>(pos), 1);
       }
 
       if ((int)node->keys.size() > MAX_KEYS) {
@@ -222,9 +315,11 @@ class BPlusTree {
 
     right->keys.assign(left->keys.begin() + static_cast<std::ptrdiff_t>(mid), left->keys.end());
     right->vals.assign(left->vals.begin() + static_cast<std::ptrdiff_t>(mid), left->vals.end());
+    right->valid_counts.assign(left->valid_counts.begin() + static_cast<std::ptrdiff_t>(mid), left->valid_counts.end());
 
     left->keys.resize(mid);
     left->vals.resize(mid);
+    left->valid_counts.resize(mid);
 
     // 维护叶子链
     right->next = left->next;
@@ -283,6 +378,16 @@ class BPlusTree {
     return cur;
   }
 
+  // 可变版本的FindLeaf（用于Delete）
+  Node* FindLeafMutable(Node* node, const Key& k) {
+    Node* cur = node;
+    while (cur && !cur->is_leaf) {
+      size_t idx = UpperBoundChildIndex(cur, k);
+      cur = cur->children[idx];
+    }
+    return cur;
+  }
+
   void FreeRec(Node* x) {
     if (!x) return;
     if (!x->is_leaf) {
@@ -307,7 +412,8 @@ class BPlusTree {
       }
     } else {
       // 叶子：为每个 key 写 value 列表
-      for (const auto& vec : x->vals) {
+      for (size_t i = 0; i < x->vals.size(); ++i) {
+        const auto& vec = x->vals[i];
         uint32_t vsz = static_cast<uint32_t>(vec.size());
         if (1 != std::fwrite(&vsz, sizeof(vsz), 1, f)) return false;
         if (vsz) {
@@ -338,6 +444,7 @@ class BPlusTree {
       }
     } else {
       x->vals.resize(ksz);
+      x->valid_counts.resize(ksz);
       for (uint32_t i = 0; i < ksz; ++i) {
         uint32_t vsz = 0;
         if (!rd(&vsz, sizeof(vsz))) { delete x; return nullptr; }
@@ -345,6 +452,7 @@ class BPlusTree {
         if (vsz) {
           if (vsz != std::fread(x->vals[i].data(), sizeof(Value), vsz, f)) { delete x; return nullptr; }
         }
+        x->valid_counts[i] = vsz;  // 加载时所有value都是有效的
       }
     }
     return x;

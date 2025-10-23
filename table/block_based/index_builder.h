@@ -155,6 +155,10 @@ class SecondaryIndexBuilder {
   // override OnKeyAdded() if they need to collect additional information.
   virtual void OnKeyAdded(const Slice& /*key*/) {}
 
+  // Check if this is an embedded secondary index (default: true)
+  // Override in subclasses that support non-embedded mode
+  virtual bool IsEmbedded() const { return true; }
+
   // Inform the index builder that all entries has been written. Block builder
   // may therefore perform any operation required for block finalization.
   //
@@ -1314,7 +1318,7 @@ class BtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   virtual size_t IndexSize() const override { return index_size_; }
   void get_Secondary_Entries(std::vector<std::pair<std::string, BlockHandle>>* sec_entries) override;
 
-  bool IsEmbedded() const { return is_embedded_; }
+  bool IsEmbedded() const override { return is_embedded_; }
 
  private:
   struct DataBlockEntry {

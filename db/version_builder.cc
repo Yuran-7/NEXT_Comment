@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <functional>
 #include <map>
@@ -30,6 +31,7 @@
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
 #include "db/version_set.h"
+#include "logging/logging.h"
 #include "port/port.h"
 #include "table/table_reader.h"
 #include "util/string_util.h"
@@ -1123,7 +1125,9 @@ class VersionBuilder::Rep {
         return s;
       }
     }
-
+    // 累积内层循环的总时间
+    uint64_t delete_inner_duration = 0;
+    uint64_t insert_inner_duration = 0;
     // Delete table files
     for (const auto& deleted_file : edit->GetDeletedFiles()) {
       const int level = deleted_file.first;
@@ -1147,9 +1151,10 @@ class VersionBuilder::Rep {
           // const ValueRange valrange = GetValRangeForTableFile(level, file_number);
           // Rect1D filerect(valrange.range.min, valrange.range.max);
           // global_rtree.Remove(filerect.min, filerect.max, std::make_pair(level, file_number));
-
+          
           const std::vector<std::pair<ValueRange, BlockHandle>> file_secentries_num = GetSecValRangeForTableFile(level, file_number);
           int globla_sec_id = 0;
+          auto inner_start = std::chrono::steady_clock::now();
           for (const std::pair<ValueRange, BlockHandle>& entry: file_secentries_num) {
             ValueRange entryvalrange = entry.first;
             Rect1D tuplerect_num(entryvalrange.range.min, entryvalrange.range.max);
@@ -1158,6 +1163,8 @@ class VersionBuilder::Rep {
             global_rtee_p->Remove(tuplerect_num.min, tuplerect_num.max, sec_index_val_num);
             globla_sec_id++;
           }
+          auto inner_end = std::chrono::steady_clock::now();
+          delete_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();          
         } else {  // 二维
           // // global index @ tuple level
           // const std::vector<std::pair<int, Mbr>> filetuples= GetTupleMbrForTableFile(level, file_number);
@@ -1188,7 +1195,6 @@ class VersionBuilder::Rep {
         return s;
       }
     }
-
     // Add new table files
     // 【全局R树构建的核心步骤】遍历新增的SST文件，将其二级索引条目插入到全局R树
     for (const auto& new_file : edit->GetNewFiles()) {
@@ -1212,6 +1218,7 @@ class VersionBuilder::Rep {
           std::vector<std::pair<ValueRange, BlockHandle>> filetuple_entries_num = meta.SecValrange;  // 从FileMetaData提取GL条目
 
           int rtree_id_num = 0;  // 全局索引条目ID（同一SST内部的条目按顺序编号）
+          auto inner_start = std::chrono::steady_clock::now();
           for (const std::pair<ValueRange, BlockHandle>& entry: filetuple_entries_num) {  // 遍历该SST的所有二级索引条目
             ValueRange entryvalrange = entry.first;  // 该条目对应的value range（min, max）
             BlockHandle entryblkhandle_num = entry.second;  // 该条目对应的数据块位置（offset, size）
@@ -1221,6 +1228,8 @@ class VersionBuilder::Rep {
                                                                                             // 这样查询时可以根据value range快速定位到SST文件和数据块
             rtree_id_num++;
           }
+          auto inner_end = std::chrono::steady_clock::now();
+          insert_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();
         } else {
           // // For global index @ tuple level
           // std::vector<std::pair<int, Mbr>> filetuplembrs = meta.tuple_mbrs;
@@ -1252,7 +1261,12 @@ class VersionBuilder::Rep {
         return s;
       }
     }
-
+    // 输出合并的日志：删除和插入的内层循环总时间
+    ROCKS_LOG_INFO(version_set_->db_options()->info_log,
+                   "[VersionBuilder] Delete inner loops: %" PRIu64 " us (deleted %zu files), "
+                   "Insert inner loops: %" PRIu64 " us (added %zu files)",
+                   delete_inner_duration, edit->GetDeletedFiles().size(),
+                   insert_inner_duration, edit->GetNewFiles().size());
     // Populate compact cursors for round-robin compaction, leave
     // the cursor to be empty to indicate it is invalid
     for (const auto& cursor : edit->GetCompactCursors()) {

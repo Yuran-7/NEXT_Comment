@@ -2826,7 +2826,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
           bg_compaction_scheduled_);
     }
     status = FlushMemTablesToOutputFiles(bg_flush_args, made_progress,
-                                         job_context, log_buffer, thread_pri);  // 调用FlushMemTableToOutputFile
+                                         job_context, log_buffer, thread_pri);  // 调用FlushMemTableToOutputFile，会调用LogAndApply，VersionStorageInfo::ComputeCompactionScore()
     TEST_SYNC_POINT("DBImpl::BackgroundFlush:BeforeFlush");
     // All the CFDs in the FlushReq must have the same flush reason, so just
     // grab the first one
@@ -2916,6 +2916,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     num_running_flushes_--;
     bg_flush_scheduled_--;
     // See if there's more work to be done
+    ROCKS_LOG_INFO(immutable_db_options_.info_log, "flush完再检查一次");
     MaybeScheduleFlushOrCompaction(); // 检查是否还有待处理的flush
     atomic_flush_install_cv_.SignalAll();
     bg_cv_.SignalAll();

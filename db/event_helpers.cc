@@ -108,8 +108,10 @@ void EventHelpers::LogAndNotifyTableFileCreationFinished(
       // basic properties:
       jwriter << "data_size" << table_properties.data_size << "index_size"
               << table_properties.index_size << "index_partitions"
-              << "sec_data_size" << table_properties.secondary_index_size
-              << table_properties.index_partitions << "top_level_index_size"
+              << table_properties.index_partitions
+              << "sec_index_size"
+              << table_properties.secondary_index_size
+              << "top_level_index_size"
               << table_properties.top_level_index_size
               << "index_key_is_user_key"
               << table_properties.index_key_is_user_key

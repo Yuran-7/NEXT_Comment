@@ -1695,11 +1695,8 @@ void BlockBasedTableBuilder::WriteSecIndexBlock(
   }
   
   if (rep_->table_options.create_secondary_index == true) {
-    // 检查是否是非嵌入式 B-tree 二级索引
-    auto* btree_sec_index_builder =
-        dynamic_cast<BtreeSecondaryIndexBuilder*>(rep_->sec_index_builder.get()); // 如果类型不匹配，返回nullptr
     
-    if (btree_sec_index_builder && !btree_sec_index_builder->IsEmbedded()) {
+    if (!rep_->sec_index_builder->IsEmbedded()) {
       // 非嵌入式模式：不需要写入 SST，只需调用 Finish 完成数据转换
       SecondaryIndexBuilder::IndexBlocks sec_index_blocks;
       rep_->sec_index_builder->Finish(&sec_index_blocks);
