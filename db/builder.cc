@@ -377,8 +377,8 @@ Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使�
           /*smallest_compaction_key=*/nullptr,
           /*largest_compaction_key*/ nullptr,
           /*allow_unprepared_value*/ false));
-      s = it->status();
-      if (s.ok() && paranoid_file_checks) {
+      s = it->status(); // 迭代器状态为false
+      if (s.ok() && paranoid_file_checks) { // 默认不是严格模式
         OutputValidator file_validator(tboptions.internal_comparator,
                                        /*enable_order_check=*/true,
                                        /*enable_hash=*/true);
@@ -399,7 +399,7 @@ Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使�
     s = iter->status();
   }
 
-  if (!s.ok() || meta->fd.GetFileSize() == 0) {
+  if (!s.ok() || meta->fd.GetFileSize() == 0) { // 因为有bug，所以进入了，meta->fd.GetFileSize()为64828188，61.82MB
     TEST_SYNC_POINT("BuildTable:BeforeDeleteFile");
 
     constexpr IODebugContext* dbg = nullptr;

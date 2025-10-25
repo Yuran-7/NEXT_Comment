@@ -8,18 +8,20 @@
 #include <cstdio>
 #include <limits>
 #include <memory>
+#include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 // 轻量级 B+ 树实现（头文件-only），仿照 util/RTree_mem.h 的风格：
-// - 模板参数化 Key/Value 与节点容量
+// - 模板参数化 Key/Handle 与节点容量
 // - 仅支持基本功能：Insert / Search / RangeSearch（叶子链顺序扫描）
-// - 重复 key 时，所有 value 聚合存放在叶子节点对应 key 的一个 vector 中
-// - 不实现删除（如需删除可后续扩展），不实现持久化
+// - 重复 key 时，所有 (filenum, handle) 聚合存放在叶子节点对应 key 的一个 unordered_multimap 中
+// - 不实现结构性删除（如需删除可后续扩展），默认提供惰性删除
 
 namespace ROCKSDB_NAMESPACE {
 
-template <class Key, class Value, int MAX_KEYS = 64, int MIN_KEYS = MAX_KEYS / 2>
+template <class Key, class BlockHandle, int MAX_KEYS = 64, int MIN_KEYS = MAX_KEYS / 2>
 class BPlusTree {
   static_assert(MAX_KEYS >= 3, "MAX_KEYS must be >= 3");
   static_assert(MIN_KEYS >= 1, "MIN_KEYS must be >= 1");
@@ -27,10 +29,10 @@ class BPlusTree {
  private:
   struct Node {
     bool is_leaf;
-    std::vector<Key> keys;                 // 大小 <= MAX_KEYS
-    std::vector<Node*> children;           // 内部节点 children.size() == keys.size() + 1
-    std::vector<std::vector<Value>> vals;  // 仅叶子：与 keys 对齐，一个 key 一个 value 向量
-    std::vector<size_t> valid_counts;      // 仅叶子：每个key对应的有效value数量（用于惰性删除）
+    std::vector<Key> keys;                                   // 大小 <= MAX_KEYS
+    std::vector<Node*> children;                             // 内部节点 children.size() == keys.size() + 1
+    std::vector<std::unordered_multimap<int, BlockHandle>> vals;  // 仅叶子：与 keys 对齐
+    std::vector<size_t> valid_counts;                        // 仅叶子：每个key对应的有效value数量（用于惰性删除）
     Node* next;                            // 叶子顺序链表
     Node* prev;                            // 叶子反向链
 
@@ -53,11 +55,11 @@ class BPlusTree {
   BPlusTree(const BPlusTree&) = delete;
   BPlusTree& operator=(const BPlusTree&) = delete;
 
-  // 插入：若 key 已存在，则将 value 追加到该 key 的 value 向量尾部；否则创建新的 key 槽
-  void Insert(const Key& k, const Value& v) {
+  // 插入：若 key 已存在，则将 (filenum, handle) 追加到该 key 的 multimap；否则创建新的 key 槽
+  void Insert(const Key& k, int filenum, const BlockHandle& handle) {
     Key sep{};
     Node* new_child = nullptr;
-    bool split = InsertRec(root_, k, v, &sep, &new_child);
+    bool split = InsertRec(root_, k, filenum, handle, &sep, &new_child);
     if (split) {  // 表示根节点发生了分裂
       // 根分裂：新建一层
       Node* new_root = new Node(false);
@@ -68,9 +70,9 @@ class BPlusTree {
     }
   }
 
-  // 删除特定key的特定value（惰性删除，仅标记为无效，不改变树结构）
-  // 返回：是否成功删除（找到了key和value）
-  bool Delete(const Key& k, const Value& v) {
+  // 删除特定 key 下指定 filenum 的所有 handle（惰性删除，不改变树结构）
+  // 返回：是否成功删除（找到了 key 和 filenum）
+  bool Delete(const Key& k, int filenum) {
     Node* leaf = FindLeafMutable(root_, k);
     if (!leaf) return false;
     
@@ -81,85 +83,44 @@ class BPlusTree {
     
     size_t idx = static_cast<size_t>(it - leaf->keys.begin());
     auto& values = leaf->vals[idx];
-    
-    // 查找并移除该value（只移除第一个匹配项）
-    for (auto val_it = values.begin(); val_it != values.end(); ++val_it) {
-      if (*val_it == v) {  // 使用 Value 的 operator==
-        values.erase(val_it);
-        leaf->valid_counts[idx] = values.size();
-        
-        // 如果该key的所有value都被删除，延迟清理（可选）
-        if (values.empty()) {
-          // 可以选择立即删除key，或等待Compact时清理
-          // 这里先保留key槽位，Compact时再清理
-        }
-        return true;
-      }
+
+    size_t erased = values.erase(filenum);
+    if (erased == 0) {
+        return false; // 没有找到要删除的 filenum
     }
-    return false;
+    leaf->valid_counts[idx] = values.size();
+    return true;
   }
 
-  // 批量删除：删除某key的多个values（用于compaction场景）
-  template <typename Container>
-  size_t BatchDelete(const Key& k, const Container& values_to_delete) {
-    Node* leaf = FindLeafMutable(root_, k);
-    if (!leaf) return 0;
-    
-    auto it = std::lower_bound(leaf->keys.begin(), leaf->keys.end(), k);
-    if (it == leaf->keys.end() || Less(k, *it) || Less(*it, k)) {
-      return 0;
-    }
-    
-    size_t idx = static_cast<size_t>(it - leaf->keys.begin());
-    auto& values = leaf->vals[idx];
-    size_t deleted_count = 0;
-    
-    // 使用std::remove_if批量删除
-    auto new_end = std::remove_if(values.begin(), values.end(),
-      [&values_to_delete, &deleted_count](const Value& v) {
-        for (const auto& to_del : values_to_delete) {
-          if (v == to_del) {  // 使用 Value 的 operator==
-            deleted_count++;
-            return true;
-          }
-        }
-        return false;
-      });
-    values.erase(new_end, values.end());
-    leaf->valid_counts[idx] = values.size();
-    
-    return deleted_count;
-  }
 
   // 压缩清理：移除所有空key槽位，重建树（可选，用于定期维护）
   void Compact() {
-    std::vector<std::pair<Key, std::vector<Value>>> all_data;
-    
+    std::vector<std::tuple<Key, int, BlockHandle>> all_entries;
+
     // 收集所有有效数据
     const Node* leaf = root_;
     while (leaf && !leaf->is_leaf) leaf = leaf->children.front();
     while (leaf) {
       for (size_t i = 0; i < leaf->keys.size(); ++i) {
-        if (!leaf->vals[i].empty()) {
-          all_data.emplace_back(leaf->keys[i], leaf->vals[i]);
+        if (leaf->vals[i].empty()) continue;
+        for (const auto& entry : leaf->vals[i]) {
+          all_entries.emplace_back(leaf->keys[i], entry.first, entry.second);
         }
       }
       leaf = leaf->next;
     }
-    
+
     // 重建树
     FreeRec(root_);
     root_ = new Node(true);
-    
-    for (auto& kv : all_data) {
-      for (const auto& v : kv.second) {
-        Insert(kv.first, v);
-      }
+
+    for (const auto& kv : all_entries) {
+      Insert(std::get<0>(kv), std::get<1>(kv), std::get<2>(kv));
     }
   }
 
-  // 精确查找：返回是否找到；若找到则 out_values 填充该 key 的所有 values
-  bool Search(const Key& k, std::vector<Value>& out_values) const {
+  // 精确查找：返回是否找到；若找到则 out_values 填充该 key 的所有 (filenum, handle)
+  bool Search(const Key& k, std::unordered_multimap<int, BlockHandle>& out_values) const {
     const Node* leaf = FindLeaf(root_, k);
     if (!leaf) return false;
     auto it = std::lower_bound(leaf->keys.begin(), leaf->keys.end(), k);
@@ -171,14 +132,14 @@ class BPlusTree {
     return false;
   }
 
-  // 返回某 key 的所有 values；若不存在返回空 vector
-  std::vector<Value> Get(const Key& k) const {
-    std::vector<Value> res;
+  // 返回某 key 的所有 (filenum, handle)；若不存在返回空 multimap
+  std::unordered_multimap<int, BlockHandle> Get(const Key& k) const {
+    std::unordered_multimap<int, BlockHandle> res;
     Search(k, res);
     return res;
   }
 
-  // 区间查询 [l, r]，对每个匹配到的 (key, value) 调用 callback(key, value)
+  // 区间查询 [l, r]，对每个匹配到的 (key, filenum, handle) 调用 callback(key, filenum, handle)
   // 若 callback 返回 false 则提前停止
   template <class Callback>
   void RangeSearch(const Key& l, const Key& r, Callback cb) const {
@@ -189,8 +150,8 @@ class BPlusTree {
         const Key& key = leaf->keys[i];
         if (Less(key, l)) continue;
         if (Less(r, key)) return;  // 超出上界，结束
-        for (const auto& val : leaf->vals[i]) {
-          if (!cb(key, val)) return;
+        for (const auto& entry : leaf->vals[i]) {
+          if (!cb(key, entry.first, entry.second)) return;
         }
       }
       leaf = leaf->next;
@@ -214,16 +175,15 @@ class BPlusTree {
   // header: magic(\"BPLS\"), key_size, val_size, max_keys, min_keys
   // 然后递归写节点：is_leaf(uint8_t), keys_count(uint32_t), keys[],
   // 如果内部节点：children_count(uint32_t)=keys_count+1，递归写子
-  // 如果叶子：对每个 key 写 values_count(uint32_t) 与 values[]
+  // 如果叶子：对每个 key 写 values_count(uint32_t) 与 (filenum, handle) 列表
 
   bool Save(const char* path) const {
     FILE* f = std::fopen(path, "wb");
     if (!f) return false;
-    auto close_guard = [](FILE* pf){ if (pf) std::fclose(pf); };
     // 写头
     const uint32_t magic = ('B'<<0)|('P'<<8)|('L'<<16)|('S'<<24);
     uint32_t key_size = static_cast<uint32_t>(sizeof(Key));
-    uint32_t val_size = static_cast<uint32_t>(sizeof(Value));
+    uint32_t val_size = static_cast<uint32_t>(sizeof(BlockHandle));
     uint32_t maxk = static_cast<uint32_t>(MAX_KEYS);
     uint32_t mink = static_cast<uint32_t>(MIN_KEYS);
     if (1 != std::fwrite(&magic, sizeof(magic), 1, f)) { std::fclose(f); return false; }
@@ -246,8 +206,8 @@ class BPlusTree {
       std::fclose(f); return false;
     }
     const uint32_t expect = ('B'<<0)|('P'<<8)|('L'<<16)|('S'<<24);
-    if (magic != expect || key_size != sizeof(Key) || val_size != sizeof(Value) ||
-        maxk != MAX_KEYS || mink != MIN_KEYS) {
+  if (magic != expect || key_size != sizeof(Key) || val_size != sizeof(BlockHandle) ||
+    maxk != MAX_KEYS || mink != MIN_KEYS) {
       std::fclose(f); return false;  // 不兼容
     }
 
@@ -267,19 +227,23 @@ class BPlusTree {
  private:
   static bool Less(const Key& a, const Key& b) { return a < b; }
 
-  // 递归插入；若当前节点产生分裂，返回 true，并通过 sep/new_right 向父节点上推分裂信息，Rec是Recursive的缩写
-  bool InsertRec(Node* node, const Key& k, const Value& v, Key* sep, Node** new_right) {
+  // 递归插入；若当前节点产生分裂，返回 true，并通过 sep/new_right 向父节点上推分裂信息
+  bool InsertRec(Node* node, const Key& k, int filenum, const BlockHandle& handle, Key* sep, Node** new_right) {
     if (node->is_leaf) {
       // 在叶子插入或追加
       auto it = std::lower_bound(node->keys.begin(), node->keys.end(), k);
       size_t pos = static_cast<size_t>(it - node->keys.begin());
       if (it != node->keys.end() && !(*it < k) && !(k < *it)) {
-        // 命中：聚合到对应的 value 向量
-        node->vals[pos].push_back(v);
+        // 命中：聚合到对应的 multimap
+        auto& mmap = node->vals[pos];
+        mmap.emplace(filenum, handle);
+        node->valid_counts[pos] = mmap.size();
       } else {
         node->keys.insert(node->keys.begin() + static_cast<std::ptrdiff_t>(pos), k);
-        node->vals.insert(node->vals.begin() + static_cast<std::ptrdiff_t>(pos), std::vector<Value>{v});
-        node->valid_counts.insert(node->valid_counts.begin() + static_cast<std::ptrdiff_t>(pos), 1);
+        node->vals.insert(node->vals.begin() + static_cast<std::ptrdiff_t>(pos), std::unordered_multimap<int, BlockHandle>());
+        auto& mmap = node->vals[pos];
+        mmap.emplace(filenum, handle);
+        node->valid_counts.insert(node->valid_counts.begin() + static_cast<std::ptrdiff_t>(pos), mmap.size());
       }
 
       if ((int)node->keys.size() > MAX_KEYS) {
@@ -293,7 +257,7 @@ class BPlusTree {
     size_t child_idx = UpperBoundChildIndex(node, k);
     Key child_sep{};
     Node* child_new_right = nullptr;
-    bool child_split = InsertRec(node->children[child_idx], k, v, &child_sep, &child_new_right);
+    bool child_split = InsertRec(node->children[child_idx], k, filenum, handle, &child_sep, &child_new_right);
     if (!child_split) return false;
 
     // 将子分裂上推的 sep 插入本节点
@@ -411,13 +375,17 @@ class BPlusTree {
         if (!SaveRec(c, f)) return false;
       }
     } else {
-      // 叶子：为每个 key 写 value 列表
+      // 叶子：为每个 key 写 (filenum, handle) 列表
       for (size_t i = 0; i < x->vals.size(); ++i) {
-        const auto& vec = x->vals[i];
-        uint32_t vsz = static_cast<uint32_t>(vec.size());
+        const auto& mmap = x->vals[i];
+        uint32_t vsz = static_cast<uint32_t>(mmap.size());
         if (1 != std::fwrite(&vsz, sizeof(vsz), 1, f)) return false;
         if (vsz) {
-          if (vsz != std::fwrite(vec.data(), sizeof(Value), vsz, f)) return false;
+          for (const auto& entry : mmap) {
+            int filenum = entry.first;
+            if (1 != std::fwrite(&filenum, sizeof(filenum), 1, f)) return false;
+            if (1 != std::fwrite(&entry.second, sizeof(BlockHandle), 1, f)) return false;
+          }
         }
       }
     }
@@ -448,11 +416,15 @@ class BPlusTree {
       for (uint32_t i = 0; i < ksz; ++i) {
         uint32_t vsz = 0;
         if (!rd(&vsz, sizeof(vsz))) { delete x; return nullptr; }
-        x->vals[i].resize(vsz);
-        if (vsz) {
-          if (vsz != std::fread(x->vals[i].data(), sizeof(Value), vsz, f)) { delete x; return nullptr; }
+        auto& mmap = x->vals[i];
+        if (vsz) mmap.reserve(vsz);
+        for (uint32_t j = 0; j < vsz; ++j) {
+          int filenum = 0;
+          BlockHandle handle{};
+          if (!rd(&filenum, sizeof(filenum)) || !rd(&handle, sizeof(handle))) { delete x; return nullptr; }
+          mmap.emplace(filenum, handle);
         }
-        x->valid_counts[i] = vsz;  // 加载时所有value都是有效的
+        x->valid_counts[i] = mmap.size();  // 加载时所有value都是有效的
       }
     }
     return x;

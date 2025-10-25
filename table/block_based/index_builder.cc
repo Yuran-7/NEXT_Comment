@@ -1375,14 +1375,20 @@ Status BtreeSecondaryIndexBuilder::Finish(
       }   
       
       // 遍历排序后的条目，调用 AddIdxEntry
-      std::list<DataBlockEntry>::iterator it;
-      for (it = data_block_entries_.begin(); it != data_block_entries_.end(); ++it) {
-        if (it == --data_block_entries_.end()) {
-          // 最后一个条目
-          AddIdxEntry(*it, true);
-        } else {
-          // 非最后一个条目
-          AddIdxEntry(*it, false);
+      if (!data_block_entries_.empty()) {
+        std::list<DataBlockEntry>::iterator it;
+        for (it = data_block_entries_.begin(); it != data_block_entries_.end(); ) {
+          // 先保存当前迭代器
+          std::list<DataBlockEntry>::iterator current = it;
+          ++it;  // 提前移动到下一个
+          
+          if (it == data_block_entries_.end()) {
+            // 当前是最后一个条目
+            AddIdxEntry(*current, true);
+          } else {
+            // 非最后一个条目
+            AddIdxEntry(*current, false);
+          }
         }
       }
       
@@ -1395,8 +1401,10 @@ Status BtreeSecondaryIndexBuilder::Finish(
       Entry& entry = entries_.front();
       
       // 调用 BlockBuilder 的 Finish() 生成索引块内容
-      index_blocks->index_block_contents = entry.value->Finish();
-      index_size_ += index_blocks->index_block_contents.size();
+      const Slice block_contents = entry.value->Finish();
+      last_block_data_.assign(block_contents.data(), block_contents.size());
+      index_blocks->index_block_contents = Slice(last_block_data_);
+      index_size_ += last_block_data_.size();
       
       entries_.pop_front();  // 移除已处理的块
       
@@ -1406,7 +1414,21 @@ Status BtreeSecondaryIndexBuilder::Finish(
       } else {
         return Status::OK();  // 所有块都已写入
       }
+    } else if (sub_index_builder_ != nullptr) {
+      // entries_ 为空但还有 sub_index_builder_ 中的数据（单层B树情况）
+      // 完成最后一个未刷新的索引块
+      const Slice block_contents = sub_index_builder_->Finish();
+      last_block_data_.assign(block_contents.data(), block_contents.size());
+      index_blocks->index_block_contents = Slice(last_block_data_);
+      index_size_ += last_block_data_.size();
+      delete sub_index_builder_;
+      sub_index_builder_ = nullptr;
+      return Status::OK();
     } else {
+      // entries_ 和 sub_index_builder_ 都为空：真的没有数据
+      // 生成一个空的索引块（与R树保持一致的行为）
+      index_block_builder_.Reset();
+      index_blocks->index_block_contents = index_block_builder_.Finish();
       return Status::OK();
     }
     

@@ -990,7 +990,7 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       if (r->IsParallelCompressionEnabled()) {  // 如果启用了并行压缩
         r->pc_rep->curr_block_keys->PushBack(key);  // 将key添加到当前块的键列表
       } else {  // 否则直接添加到过滤器
-        if (r->filter_builder != nullptr) {  // 如果过滤器构建器存在
+        if (r->filter_builder != nullptr) {  // 如果过滤器构建器存在，默认不存在
           size_t ts_sz =  // 获取时间戳大小
               r->internal_comparator.user_comparator()->timestamp_size();
           r->filter_builder->Add(ExtractUserKeyAndStripTimestamp(key, ts_sz));  // 添加用户key到过滤器（去除时间戳）
@@ -1045,7 +1045,7 @@ void BlockBasedTableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   if (r->IsParallelCompressionEnabled() &&
-      r->state == Rep::State::kUnbuffered) {
+      r->state == Rep::State::kUnbuffered) {  // 如果启用了 并行压缩模式，并且当前状态是“未缓冲”
     r->data_block.Finish();
     ParallelCompressionRep::BlockRep* block_rep = r->pc_rep->PrepareBlock(
         r->compression_type, r->first_key_in_next_block, &(r->data_block));

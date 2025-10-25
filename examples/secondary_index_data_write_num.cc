@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
     // For per file secondary index in SST file
     block_based_options.create_secondary_index = true;    // 声明在include/rocksdb/table.h，默认false，主要使用在table/block_based/block_based_table_builder.cc
     block_based_options.create_sec_index_reader = true;  // 用在table/block_based/block_based_table_builder.cc，PrefetchIndexAndFilterBlocks函数
-    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // 默认是 kRtreeSec
+    block_based_options.sec_index_type = BlockBasedTableOptions::kBtreeSec; // kOneDRtreeSec，kBtreeSec，kRtreeSec
     
     // For global secondary index in memory
     options.create_global_sec_index = true;  // 初始化options/cf_options.cc下的ImmutableCFOptions的global_sec_index
@@ -278,7 +278,7 @@ int main(int argc, char* argv[]) {
                 continue;
             }
             lineCount++;
-
+            auto start = std::chrono::high_resolution_clock::now();
             // Parse fields
             try {
                 id = std::stoi(fields[0]);
@@ -322,7 +322,6 @@ int main(int argc, char* argv[]) {
             if (lineCount % 100000 == 1) {
                 std::cout << "processed " << lineCount << " records" << std::endl;
             }
-            auto start = std::chrono::high_resolution_clock::now();
             s = db->PutEntity(WriteOptions(), default_cf, key, columns);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
@@ -365,11 +364,11 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
-  -o secondary_index_data_write_num ../librocksdb.a \
+  -o secondary_index_data_write_num ../librocksdb_debug.a \
   -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
 
 
-// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_buildings.txt
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_building.csv
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m.csv

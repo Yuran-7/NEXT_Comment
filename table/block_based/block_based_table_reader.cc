@@ -1144,18 +1144,23 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   // create secondary index reader
   // to prevent contentionn with pk index reader, a separated reader is needed
   if (table_options.create_sec_index_reader) {
-    std::unique_ptr<IndexReader> sec_index_reader;
-    bool is_sec_index_spatial = true;
-    if(table_options.sec_index_type == BlockBasedTableOptions::kOneDRtreeSec) {
-      is_sec_index_spatial = false;
+    // Skip creation for kBtreeSec type (not implemented yet)
+    if (table_options.sec_index_type == BlockBasedTableOptions::kBtreeSec) {
+      rep_->sec_index_reader = nullptr;
+    } else {
+      std::unique_ptr<IndexReader> sec_index_reader;
+      bool is_sec_index_spatial = true;
+      if(table_options.sec_index_type == BlockBasedTableOptions::kOneDRtreeSec) {
+        is_sec_index_spatial = false;
+      }
+      s = new_table->CreateSecIndexReader(ro, is_sec_index_spatial, prefetch_buffer, meta_iter, use_cache,
+                                      prefetch_index, pin_index, lookup_context,
+                                      &sec_index_reader);
+
+      if (!s.ok()) {return s;}
+
+      rep_->sec_index_reader = std::move(sec_index_reader);
     }
-    s = new_table->CreateSecIndexReader(ro, is_sec_index_spatial, prefetch_buffer, meta_iter, use_cache,
-                                    prefetch_index, pin_index, lookup_context,
-                                    &sec_index_reader);
-
-    if (!s.ok()) {return s;}
-
-    rep_->sec_index_reader = std::move(sec_index_reader);
   }
 
   // The partitions of partitioned index are always stored in cache. They
@@ -1167,7 +1172,9 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
       if (!s.ok()) {
         return s;
       }
-      s = rep_->sec_index_reader->CacheDependencies(ro, pin_partition);
+      if (rep_->sec_index_reader != nullptr) {
+        s = rep_->sec_index_reader->CacheDependencies(ro, pin_partition);
+      }
     }
   }
   if (!s.ok()) {

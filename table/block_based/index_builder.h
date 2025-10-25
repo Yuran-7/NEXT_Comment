@@ -1295,7 +1295,7 @@ class BtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
     const bool use_value_delta_encoding,
     const BlockBasedTableOptions& table_opt,
     const std::vector<Slice>& sec_index_columns,
-    const bool is_embedded = true); // return new BtreeSecondaryIndexBuilder
+    const bool is_embedded = false); // return new BtreeSecondaryIndexBuilder
 
   explicit BtreeSecondaryIndexBuilder(const InternalKeyComparator* comparator,
                                  const BlockBasedTableOptions& table_opt,
@@ -1358,5 +1358,6 @@ class BtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   
   BlockBuilder index_block_builder_;  // 备用（未使用）
   std::vector<double> data_values_;  // 临时存储当前 data block 的 double 值
+  std::string last_block_data_;  // 缓存最近一次 Finish 生成的索引块内容，确保生命周期覆盖写入过程
 };
 }  // namespace ROCKSDB_NAMESPACE

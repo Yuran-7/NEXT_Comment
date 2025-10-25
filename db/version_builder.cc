@@ -1097,8 +1097,7 @@ class VersionBuilder::Rep {
   }
 
     // Apply all of the edits in *edit to the current state.
-  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtee_p) {  // 只在内存中把一条 VersionEdit 合并进 VersionBuilder（更新各层文件增删、compaction 指针等）
-    // std::cout << "apply" << std::endl;
+  Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtee_p) {
     {
       const Status s = CheckConsistency(base_vstorage_);
       if (!s.ok()) {
@@ -1135,23 +1134,8 @@ class VersionBuilder::Rep {
 
       // if global rtree is activated
       // remove entry from global rtree for each deleted files
-      if (ioptions_->global_sec_index) { //ImmutableCFOptions，定义在        
-        if (ioptions_->global_sec_index_is_btree) {
-          const std::vector<std::pair<double, BlockHandle>> file_secentries_num = GetSecValForTableFile(level, file_number);
-          int globla_sec_id = 0;
-          for (const std::pair<double, BlockHandle>& entry: file_secentries_num) {
-            double entryvalrange = entry.first;
-            Rect1D tuplerect_num(entryvalrange, entryvalrange); // TODO
-            BlockHandle entryblkhandle_num = entry.second;
-            GlobalSecIndexValue sec_index_val_num(globla_sec_id, file_number, entryblkhandle_num);
-            global_rtee_p->Remove(tuplerect_num.min, tuplerect_num.max, sec_index_val_num);
-            globla_sec_id++;
-          }
-        } else if (!ioptions_->global_sec_index_is_spatial) { // 一维
-          // const ValueRange valrange = GetValRangeForTableFile(level, file_number);
-          // Rect1D filerect(valrange.range.min, valrange.range.max);
-          // global_rtree.Remove(filerect.min, filerect.max, std::make_pair(level, file_number));
-          
+      if (ioptions_->global_sec_index) {
+        if (!ioptions_->global_sec_index_is_spatial) {
           const std::vector<std::pair<ValueRange, BlockHandle>> file_secentries_num = GetSecValRangeForTableFile(level, file_number);
           int globla_sec_id = 0;
           auto inner_start = std::chrono::steady_clock::now();
@@ -1205,12 +1189,9 @@ class VersionBuilder::Rep {
       // 为每个新文件的每个二级索引条目添加到全局R树
       // 索引键(Rect)：基于value range的矩形边界
       // 索引值(GlobalSecIndexValue)：包含索引ID、文件号、BlockHandle
-      if(ioptions_->global_sec_index) {
+      if (ioptions_->global_sec_index) {
         const uint64_t filenumber = meta.fd.GetNumber();
-        if (ioptions_->global_sec_index_is_btree) {
-          const std::vector<std::pair<ValueRange, BlockHandle>> file_secentries_num = GetSecValRangeForTableFile(level, filenumber);
-
-        } else if (!ioptions_->global_sec_index_is_spatial) {  // 一维R树（数值型二级索引）
+        if (!ioptions_->global_sec_index_is_spatial) {  // 一维R树（数值型二级索引）
           // ValueRange filevalrange = meta.valrange;
           // Rect1D filerect(filevalrange.range.min, filevalrange.range.max);
           // global_rtree.Insert(filerect.min, filerect.max, std::make_pair(level, filenumber));
@@ -1286,6 +1267,76 @@ class VersionBuilder::Rep {
 
     return Status::OK();
   } // Apply函数结束
+
+  Status Apply(const VersionEdit* edit, GlobalSecBtree* global_btree_p) {
+    {
+      const Status s = CheckConsistency(base_vstorage_);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    for (const auto& blob_file_addition : edit->GetBlobFileAdditions()) {
+      const Status s = ApplyBlobFileAddition(blob_file_addition);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    for (const auto& blob_file_garbage : edit->GetBlobFileGarbages()) {
+      const Status s = ApplyBlobFileGarbage(blob_file_garbage);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    const bool maintain_secondary_index = ioptions_->global_sec_index && global_btree_p;
+
+    for (const auto& deleted_file : edit->GetDeletedFiles()) {
+      const int level = deleted_file.first;
+      const uint64_t file_number = deleted_file.second;
+
+      if (maintain_secondary_index) {
+        const auto file_entries = GetSecValForTableFile(level, file_number);
+        for (const auto& entry : file_entries) {
+          global_btree_p->Delete(entry.first, static_cast<int>(file_number));
+        }
+      }
+
+      const Status s = ApplyFileDeletion(level, file_number);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    for (const auto& new_file : edit->GetNewFiles()) {
+      const int level = new_file.first;
+      const FileMetaData& meta = new_file.second;
+
+      if (maintain_secondary_index) {
+        const uint64_t filenumber = meta.fd.GetNumber();
+        for (const auto& entry : meta.SecVal) {
+          global_btree_p->Insert(entry.first, static_cast<int>(filenumber), entry.second);
+        }
+      }
+
+      const Status s = ApplyFileAddition(level, meta);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    for (const auto& cursor : edit->GetCompactCursors()) {
+      const int level = cursor.first;
+      const InternalKey smallest_uncompacted_key = cursor.second;
+      const Status s = ApplyCompactCursors(level, smallest_uncompacted_key);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+
+    return Status::OK();
+  }
 
   // Helper function template for merging the blob file metadata from the base
   // version with the mutable metadata representing the state after applying the
@@ -1724,6 +1775,10 @@ Status VersionBuilder::Apply(const VersionEdit* edit) {
 
 Status VersionBuilder::Apply(const VersionEdit* edit, GlobalSecRtree* global_rtree_p) {
   return rep_->Apply(edit, global_rtree_p);
+}
+
+Status VersionBuilder::Apply(const VersionEdit* edit, GlobalSecBtree* global_btree_p) {
+  return rep_->Apply(edit, global_btree_p);
 }
 
 Status VersionBuilder::SaveTo(VersionStorageInfo* vstorage) const {
