@@ -1291,16 +1291,22 @@ class VersionBuilder::Rep {
     }
 
     const bool maintain_secondary_index = ioptions_->global_sec_index && global_btree_p;
-
+    // 累积内层循环的总时间
+    uint64_t delete_inner_duration = 0;
+    uint64_t insert_inner_duration = 0;
+    
     for (const auto& deleted_file : edit->GetDeletedFiles()) {
       const int level = deleted_file.first;
       const uint64_t file_number = deleted_file.second;
 
       if (maintain_secondary_index) {
         const auto file_entries = GetSecValForTableFile(level, file_number);
+        auto inner_start = std::chrono::steady_clock::now();
         for (const auto& entry : file_entries) {
           global_btree_p->Delete(entry.first, static_cast<int>(file_number));
         }
+        auto inner_end = std::chrono::steady_clock::now();
+        delete_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();
       }
 
       const Status s = ApplyFileDeletion(level, file_number);
@@ -1308,23 +1314,30 @@ class VersionBuilder::Rep {
         return s;
       }
     }
-
+    
     for (const auto& new_file : edit->GetNewFiles()) {
       const int level = new_file.first;
       const FileMetaData& meta = new_file.second;
 
       if (maintain_secondary_index) {
         const uint64_t filenumber = meta.fd.GetNumber();
+        auto inner_start = std::chrono::steady_clock::now();
         for (const auto& entry : meta.SecVal) {
           global_btree_p->Insert(entry.first, static_cast<int>(filenumber), entry.second);
         }
+        auto inner_end = std::chrono::steady_clock::now();
+        insert_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();
       }
-
       const Status s = ApplyFileAddition(level, meta);
       if (!s.ok()) {
         return s;
       }
     }
+    ROCKS_LOG_INFO(version_set_->db_options()->info_log,
+               "[VersionBuilder] Delete inner loops: %" PRIu64 " us (deleted %zu files), "
+               "Insert inner loops: %" PRIu64 " us (added %zu files)",
+               delete_inner_duration, edit->GetDeletedFiles().size(),
+               insert_inner_duration, edit->GetNewFiles().size());
 
     for (const auto& cursor : edit->GetCompactCursors()) {
       const int level = cursor.first;

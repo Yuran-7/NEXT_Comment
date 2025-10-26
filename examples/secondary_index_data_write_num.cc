@@ -168,10 +168,11 @@ int main(int argc, char* argv[]) {
     // For per file secondary index in SST file
     block_based_options.create_secondary_index = true;    // 声明在include/rocksdb/table.h，默认false，主要使用在table/block_based/block_based_table_builder.cc
     block_based_options.create_sec_index_reader = true;  // 用在table/block_based/block_based_table_builder.cc，PrefetchIndexAndFilterBlocks函数
-    block_based_options.sec_index_type = BlockBasedTableOptions::kBtreeSec; // kOneDRtreeSec，kBtreeSec，kRtreeSec
+    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // kOneDRtreeSec，kBtreeSec，kRtreeSec
     
     // For global secondary index in memory
     options.create_global_sec_index = true;  // 初始化options/cf_options.cc下的ImmutableCFOptions的global_sec_index
+    // options.global_sec_index_is_btree =true;
     // To indicate the index attribute type
     options.global_sec_index_is_spatial = false;  // 默认是true
 
@@ -352,7 +353,7 @@ int main(int argc, char* argv[]) {
 }
 
 /*
-g++ -g3 -O0 -std=c++17 \
+g++ -O3 -std=c++17 \
   -faligned-new -DHAVE_ALIGNED_NEW \
   -DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX \
   -DOS_LINUX -fno-builtin-memcmp \
@@ -364,7 +365,7 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
-  -o secondary_index_data_write_num ../librocksdb_debug.a \
+  -o secondary_index_data_write_num ../librocksdb.a \
   -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
@@ -372,3 +373,6 @@ g++ -g3 -O0 -std=c++17 \
 
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_building.csv
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m.csv
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m_10.csv
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 10000000 /NV1/ysh/dataset/buildings_10m.csv
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 10000000 /NV1/ysh/dataset/buildings_10m_20.csv

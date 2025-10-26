@@ -284,6 +284,7 @@ struct FileMetaData {
                const Mbr& _mbr, const SpatialSketch& _sketch, 
                const std::vector<std::pair<ValueRange, BlockHandle>>& _SecValrange, 
                const std::vector<std::pair<Mbr, BlockHandle>>& _SecondaryEntries, 
+               const std::vector<std::pair<double, BlockHandle>>& _SecVal,
                const SequenceNumber& smallest_seq,
                const SequenceNumber& largest_seq, bool marked_for_compact,
                Temperature _temperature, uint64_t oldest_blob_file,
@@ -297,6 +298,7 @@ struct FileMetaData {
         mbr(_mbr),
         sketch(_sketch),
         SecValrange(_SecValrange),
+        SecVal(_SecVal),
         SecondaryEntries(_SecondaryEntries),
         marked_for_compaction(marked_for_compact),
         temperature(_temperature),
@@ -540,12 +542,13 @@ class VersionEdit {
                const std::string& file_checksum_func_name,
                const UniqueId64x2& unique_id, Mbr mbr, SpatialSketch sketch,
                std::vector<std::pair<ValueRange, BlockHandle>> SecValrange, 
-               std::vector<std::pair<Mbr, BlockHandle>> SecondaryEntries) {
+               std::vector<std::pair<Mbr, BlockHandle>> SecondaryEntries,
+               std::vector<std::pair<double, BlockHandle>> SecVal) {
     assert(smallest_seqno <= largest_seqno);
     new_files_.emplace_back(
         level,
         FileMetaData(file, file_path_id, file_size, smallest, largest, mbr, sketch,
-                     SecValrange, SecondaryEntries, smallest_seqno, largest_seqno, marked_for_compaction,
+                     SecValrange, SecondaryEntries, SecVal, smallest_seqno, largest_seqno, marked_for_compaction,
                      temperature, oldest_blob_file_number, oldest_ancester_time,
                      file_creation_time, file_checksum, file_checksum_func_name,
                      unique_id));

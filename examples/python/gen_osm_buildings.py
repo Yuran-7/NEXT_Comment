@@ -227,3 +227,5 @@ if __name__ == "__main__":
 
     target_bytes = parse_size_to_bytes(target_size_str)
     generate_buildings(args.num, args.out, target_size_bytes=target_bytes, precise=(not args.no_precise))
+
+# python python/gen_osm_buildings.py -n 10000000 -o /NV1/ysh/dataset/buildings_10m.txt --target-size 4.3GB

@@ -5376,6 +5376,7 @@ VersionSet::VersionSet(const std::string& dbname,
       io_tracer_(io_tracer),
       db_session_id_(db_session_id) {
         global_rtree_.Load(global_rtree_loc_);
+        global_btree_.Load(global_btree_loc_);
       }
 // 析构：在数据库关闭/DBImpl 析构时销毁。~VersionSet 会释放 ColumnFamilySet、清理/回收 obsolete 文件句柄，保存必要状态（例如示例代码中保存 global_rtree_）
 VersionSet::~VersionSet() {
@@ -5393,6 +5394,7 @@ VersionSet::~VersionSet() {
   io_status_.PermitUncheckedError();
 
   global_rtree_.Save(global_rtree_loc_);
+  global_btree_.Save(global_btree_loc_);
 }
 
 void VersionSet::Reset() {
@@ -5425,6 +5427,7 @@ void VersionSet::Reset() {
   obsolete_manifests_.clear();
   wals_.Reset();
   global_rtree_.Load(global_rtree_loc_);
+  global_btree_.Load(global_btree_loc_);
 }
 
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
@@ -5559,7 +5562,7 @@ Status VersionSet::ProcessManifestWrites(
         TEST_SYNC_POINT_CALLBACK("VersionSet::ProcessManifestWrites:NewVersion",
                                  version);
       }
-      for (const auto& e : last_writer->edit_list) {
+      for (const auto& e : last_writer->edit_list) {  // 会对 batch_edits（也就是 edit_list）逐个调用 LogAndApplyHelper(...) → builder->Apply(edit, &global_rtree_)
         if (e->is_in_atomic_group_) {
           if (batch_edits.empty() || !batch_edits.back()->is_in_atomic_group_ ||
               (batch_edits.back()->is_in_atomic_group_ &&
@@ -5570,7 +5573,7 @@ Status VersionSet::ProcessManifestWrites(
           group_start = std::numeric_limits<size_t>::max();
         }
         Status s = LogAndApplyHelper(last_writer->cfd, builder, e,
-                                     &max_last_sequence, mu);
+                                     &max_last_sequence, mu); // 非刷盘或者compaction也会执行
         if (!s.ok()) {
           // free up the allocated memory
           for (auto v : versions) {
@@ -6092,7 +6095,7 @@ Status VersionSet::LogAndApply(
   }
   return ProcessManifestWrites(writers, mu, dir_contains_current_file,
                                new_descriptor_log, new_cf_options);
-}
+} // LogAndApply -> ProcessManifestWrites -> LogAndApplyHelper -> builder->Apply
 
 void VersionSet::LogAndApplyCFHelper(VersionEdit* edit,
                                      SequenceNumber* max_last_sequence) {
@@ -6138,9 +6141,21 @@ Status VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
   // because WAL edits do not need to be applied to versions,
   // we return Status::OK() in this case.
   assert(builder || edit->IsWalManipulation());
-  // return builder ? builder->Apply(edit) : Status::OK();
-  // std::cout << "log and apply" << std::endl;
-  return builder ? builder->Apply(edit, &global_rtree_) : Status::OK();
+
+  if (!builder) {
+    return Status::OK();
+  }
+  
+  // Check if global secondary index is enabled and determine which index type to use
+  // If B+tree secondary index is enabled, use global_btree_; otherwise use global_rtree_
+  if (cfd && cfd->ioptions()->global_sec_index && 
+      cfd->ioptions()->global_sec_index_is_btree) {
+    // Use B+tree for global secondary index
+    return builder->Apply(edit, &global_btree_);
+  } else {
+    // Use R-tree for global secondary index (default)
+    return builder->Apply(edit, &global_rtree_);
+  }
 }
 
 Status VersionSet::GetCurrentManifestPath(const std::string& dbname,

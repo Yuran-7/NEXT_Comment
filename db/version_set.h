@@ -1510,6 +1510,9 @@ class VersionSet {
   GlobalSecRtree global_rtree_;
   const char* global_rtree_loc_ = "/NV1/ysh/NEXT/examples/testdb/global_rtree";
 
+  typedef BPlusTree<double, BlockHandle> GlobalSecBTree; // key type may be changed
+  GlobalSecBTree global_btree_;
+  const char* global_btree_loc_ = "/NV1/ysh/NEXT/examples/testdb/global_btree";
  protected:
   using VersionBuilderMap =
       UnorderedMap<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>>;

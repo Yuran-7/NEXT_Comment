@@ -27,4 +27,4 @@ def txt_to_csv(txt_path, csv_path):
 
 
 if __name__ == "__main__":
-    txt_to_csv("/NV1/ysh/dataset/buildings_1m/buildings_1m", "/NV1/ysh/dataset/buildings_1m/buildings_1m.csv")
+    txt_to_csv("/NV1/ysh/dataset/buildings_10m.txt", "/NV1/ysh/dataset/buildings_10m.csv")

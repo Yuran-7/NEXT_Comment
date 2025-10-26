@@ -1581,7 +1581,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
                   meta.oldest_blob_file_number, meta.oldest_ancester_time,
                   meta.file_creation_time, meta.file_checksum,
                   meta.file_checksum_func_name, meta.unique_id, meta.mbr, meta.sketch, 
-                  meta.SecValrange, meta.SecondaryEntries);
+                  meta.SecValrange, meta.SecondaryEntries, meta.SecVal);
 
     for (const auto& blob : blob_file_additions) {
       edit->AddBlobFile(blob);

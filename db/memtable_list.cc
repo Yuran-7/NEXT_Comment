@@ -520,7 +520,7 @@ Status MemTableList::TryInstallMemtableFlushResults(
                            m->edit_.GetBlobFileAdditions().size());
         }
 
-        edit_list.push_back(&m->edit_);
+        edit_list.push_back(&m->edit_); // 这是“新增文件”的 VersionEdit
         memtables_to_flush.push_back(m);
 #ifndef ROCKSDB_LITE
         std::unique_ptr<FlushJobInfo> info = m->ReleaseFlushJobInfo();
@@ -566,7 +566,7 @@ Status MemTableList::TryInstallMemtableFlushResults(
             "AfterComputeMinWalToKeep",
             nullptr);
       }
-      edit_list.push_back(&wal_deletion);
+      edit_list.push_back(&wal_deletion); // 这是WAL/最小日志号的 VersionEdit（不涉及文件变更）
 
       const auto manifest_write_cb = [this, cfd, batch_count, log_buffer,
                                       to_delete, mu](const Status& status) {

@@ -33,4 +33,4 @@ print(f"\n共有 {len(counter)} 个不同的第二列值。")
 print(f"其中 {dup_count} 个值出现次数大于 1。")
 
 
-# python3 python/count_second_column.py /NV1/ysh/dataset/buildings_1m/buildings_1m
+# python python/count_cardinality.py /NV1/ysh/dataset/buildings_10m.csv
