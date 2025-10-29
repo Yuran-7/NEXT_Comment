@@ -1360,4 +1360,77 @@ class BtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   std::vector<double> data_values_;  // 临时存储当前 data block 的 double 值
   std::string last_block_data_;  // 缓存最近一次 Finish 生成的索引块内容，确保生命周期覆盖写入过程
 };
+
+class HashSecondaryIndexBuilder : public SecondaryIndexBuilder {
+ public:
+  static HashSecondaryIndexBuilder* CreateIndexBuilder(
+    const ROCKSDB_NAMESPACE::InternalKeyComparator* comparator,
+    const bool use_value_delta_encoding,
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns,
+    const bool is_embedded = false); // return new HashSecondaryIndexBuilder
+
+  explicit HashSecondaryIndexBuilder(const InternalKeyComparator* comparator,
+                                 const BlockBasedTableOptions& table_opt,
+                                 const bool use_value_delta_encoding,
+                                 const std::vector<Slice>& sec_index_columns,
+                                 const bool is_embedded);  // 构造函数
+  virtual ~HashSecondaryIndexBuilder();
+
+  virtual void OnKeyAdded(const Slice& value) override;
+
+  virtual void AddIndexEntry(std::string* last_key_in_current_block,
+                             const Slice* first_key_in_next_block,
+                             const BlockHandle& block_handle) override;
+
+  
+  virtual Status Finish(
+      IndexBlocks* index_blocks,
+      const BlockHandle& last_partition_block_handle) override;
+
+  virtual size_t IndexSize() const override { return index_size_; }
+  void get_Secondary_Entries(std::vector<std::pair<std::string, BlockHandle>>* sec_entries) override;
+
+  bool IsEmbedded() const override { return is_embedded_; }
+
+ private:
+  struct DataBlockEntry {
+    BlockHandle datablockhandle;
+    std::string datablocklastkey;
+    std::string sec_value;
+  };
+  std::list<DataBlockEntry> data_block_entries_;
+
+  void AddIdxEntry(DataBlockEntry datablkentry, bool last=false);
+  void MakeNewSubIndexBuilder();  // 创建新的子索引构建器
+  
+  std::string serializeSecValues(const double& sec_values) {
+    std::string serialized;
+    serialized.append(reinterpret_cast<const char*>(&sec_values), sizeof(sec_values));
+    return serialized;
+  }
+
+  // Entry 结构：包含索引块的信息
+  struct Entry {
+    std::string key;  // 最小的 sec_value（第一个 double 值）
+    std::unique_ptr<BlockBuilder> value;  // 索引块构建器
+  };
+  std::list<Entry> entries_;  // 已完成的索引块列表
+
+  const BlockBasedTableOptions& table_opt_;
+  bool use_value_delta_encoding_;
+  std::vector<std::pair<std::string, BlockHandle>> sec_entries_; // for secondary global index
+  std::vector<Slice> sec_index_columns_; // 用户指定的二级索引列
+  bool is_embedded_; // 是否是嵌入式二级索引
+
+  BlockBuilder* sub_index_builder_;  // 当前正在构建的索引块
+  std::string sub_index_first_key_;  // 当前索引块的第一个 key（最小值）
+  std::unique_ptr<FlushBlockPolicy> flush_policy_;  // 刷新策略（控制块大小 512 字节）
+  bool partition_cut_requested_;  // 是否请求分区切割
+  bool finishing_indexes;  // 是否正在完成索引（多次调用 Finish）
+  
+  BlockBuilder index_block_builder_;  // 备用（未使用）
+  std::vector<double> data_values_;  // 临时存储当前 data block 的 double 值
+  std::string last_block_data_;  // 缓存最近一次 Finish 生成的索引块内容，确保生命周期覆盖写入过程
+};
 }  // namespace ROCKSDB_NAMESPACE

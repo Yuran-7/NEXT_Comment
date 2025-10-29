@@ -245,6 +245,7 @@ struct BlockBasedTableOptions {
     kRtreeSec = 0x00,
     kOneDRtreeSec = 0x01, // One-Dimentional Rtree for numerical data (1D)
     kBtreeSec = 0x02,     // B+tree secondary index for ordered data (1D)
+    kHashSec = 0x03      // Hash secondary index for exact match (1D)
   };
   SecondaryIndexType sec_index_type = kRtreeSec;
 

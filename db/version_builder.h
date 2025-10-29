@@ -16,6 +16,7 @@
 #include "util/RTree_mem.h"
 #include "util/rtree.h"
 #include "util/BPlusTree.h"
+#include "util/GlobalSecRobinHood.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -37,6 +38,7 @@ class VersionBuilder {
  public:
   typedef RTree<GlobalSecIndexValue, double, 1, double> GlobalSecRtree;
   typedef BPlusTree<double, BlockHandle> GlobalSecBtree;
+  typedef GlobalSecRobinHood<double, BlockHandle> GlobalSecHash;
   VersionBuilder(const FileOptions& file_options,
                  const ImmutableCFOptions* ioptions, TableCache* table_cache,
                  VersionStorageInfo* base_vstorage, VersionSet* version_set,
@@ -48,6 +50,7 @@ class VersionBuilder {
   Status Apply(const VersionEdit* edit);
   Status Apply(const VersionEdit* edit, GlobalSecRtree* global_rtree_p);  // Apply 是 LogAndApply 的组成步骤之一。LogAndApply 在安装新 Version 之前，会用 VersionBuilder::Apply 将传入的 VersionEdit（可多条、可跨 CF）先应用到内存中的构建器。
   Status Apply(const VersionEdit* edit, GlobalSecBtree* global_btree_p);
+  Status Apply(const VersionEdit* edit, GlobalSecHash* global_hash_p);
   Status SaveTo(VersionStorageInfo* vstorage) const;
   Status LoadTableHandlers(
       InternalStats* internal_stats, int max_threads,

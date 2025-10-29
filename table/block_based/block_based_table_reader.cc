@@ -1145,7 +1145,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   // to prevent contentionn with pk index reader, a separated reader is needed
   if (table_options.create_sec_index_reader) {
     // Skip creation for kBtreeSec type (not implemented yet)
-    if (table_options.sec_index_type == BlockBasedTableOptions::kBtreeSec) {
+    if (table_options.sec_index_type == BlockBasedTableOptions::kBtreeSec || table_options.sec_index_type == BlockBasedTableOptions::kHashSec) {
       rep_->sec_index_reader = nullptr;
     } else {
       std::unique_ptr<IndexReader> sec_index_reader;

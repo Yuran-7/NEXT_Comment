@@ -94,6 +94,7 @@ struct ImmutableCFOptions {
   bool global_sec_index_is_spatial;
 
   bool global_sec_index_is_btree;
+  bool global_sec_index_is_hash;
 };
 
 struct ImmutableOptions : public ImmutableDBOptions, public ImmutableCFOptions {
@@ -183,6 +184,7 @@ struct MutableCFOptions {
         global_sec_index_loc(options.global_sec_index_loc),
         global_sec_index_is_spatial(options.global_sec_index_is_spatial),
         global_sec_index_is_btree(options.global_sec_index_is_btree),
+        global_sec_index_is_hash(options.global_sec_index_is_hash),
         sec_index_columns(options.sec_index_columns) {
     RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
@@ -235,6 +237,7 @@ struct MutableCFOptions {
         global_sec_index_loc(nullptr),
         global_sec_index_is_spatial(true),
         global_sec_index_is_btree(false),
+        global_sec_index_is_hash(false),
         sec_index_columns({Slice("area")}) {}
 
   explicit MutableCFOptions(const Options& options);
@@ -334,6 +337,7 @@ struct MutableCFOptions {
   bool global_sec_index_is_spatial;
 
   bool global_sec_index_is_btree;
+  bool global_sec_index_is_hash;
 
   std::vector<Slice> sec_index_columns;
 

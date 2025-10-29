@@ -5377,6 +5377,7 @@ VersionSet::VersionSet(const std::string& dbname,
       db_session_id_(db_session_id) {
         global_rtree_.Load(global_rtree_loc_);
         global_btree_.Load(global_btree_loc_);
+        global_hash_.Load(global_hash_loc_);
       }
 // 析构：在数据库关闭/DBImpl 析构时销毁。~VersionSet 会释放 ColumnFamilySet、清理/回收 obsolete 文件句柄，保存必要状态（例如示例代码中保存 global_rtree_）
 VersionSet::~VersionSet() {
@@ -5395,6 +5396,7 @@ VersionSet::~VersionSet() {
 
   global_rtree_.Save(global_rtree_loc_);
   global_btree_.Save(global_btree_loc_);
+  global_hash_.Save(global_hash_loc_);
 }
 
 void VersionSet::Reset() {
@@ -5428,6 +5430,7 @@ void VersionSet::Reset() {
   wals_.Reset();
   global_rtree_.Load(global_rtree_loc_);
   global_btree_.Load(global_btree_loc_);
+  global_hash_.Load(global_hash_loc_);
 }
 
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
@@ -6148,12 +6151,13 @@ Status VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
   
   // Check if global secondary index is enabled and determine which index type to use
   // If B+tree secondary index is enabled, use global_btree_; otherwise use global_rtree_
-  if (cfd && cfd->ioptions()->global_sec_index && 
-      cfd->ioptions()->global_sec_index_is_btree) {
+  if (cfd->ioptions()->global_sec_index_is_btree) {
     // Use B+tree for global secondary index
     return builder->Apply(edit, &global_btree_);
+  } else if (cfd->ioptions()->global_sec_index_is_hash) {
+    // Use hash table for global secondary index
+    return builder->Apply(edit, &global_hash_);
   } else {
-    // Use R-tree for global secondary index (default)
     return builder->Apply(edit, &global_rtree_);
   }
 }

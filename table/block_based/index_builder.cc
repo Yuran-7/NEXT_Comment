@@ -111,6 +111,11 @@ SecondaryIndexBuilder* SecondaryIndexBuilder::CreateSecIndexBuilder(
          comparator, use_value_delta_encoding, table_opt, sec_index_columns);
       break;
     }
+    case BlockBasedTableOptions::kHashSec: {
+      result = HashSecondaryIndexBuilder::CreateIndexBuilder(
+         comparator, use_value_delta_encoding, table_opt, sec_index_columns);
+      break;
+    }
     default: {
       assert(!"Do not recognize the index type ");
       break;
@@ -1444,6 +1449,245 @@ Status BtreeSecondaryIndexBuilder::Finish(
 }
 
 void BtreeSecondaryIndexBuilder::get_Secondary_Entries(
+  std::vector<std::pair<std::string, BlockHandle>>* sec_entries) {
+  // 仅用于非嵌入式全局二级索引模式
+  *sec_entries = sec_entries_;
+  sec_entries_.clear();
+}
+
+HashSecondaryIndexBuilder* HashSecondaryIndexBuilder::CreateIndexBuilder(  // 创建B树辅助索引构建器的工厂方法
+    const InternalKeyComparator* comparator,  // 内部键比较器
+    const bool use_value_delta_encoding,  // 是否使用值增量编码
+    const BlockBasedTableOptions& table_opt,
+    const std::vector<Slice>& sec_index_columns,
+    bool is_embedded) {
+  return new HashSecondaryIndexBuilder(comparator, table_opt,  // 返回新创建的B树辅助索引构建器实例
+                                     use_value_delta_encoding,
+                                     sec_index_columns,
+                                     is_embedded);
+}
+
+HashSecondaryIndexBuilder::HashSecondaryIndexBuilder(  // 构造函数
+    const InternalKeyComparator* comparator,
+    const BlockBasedTableOptions& table_opt,
+    const bool use_value_delta_encoding,
+    const std::vector<Slice>& sec_index_columns,
+    bool is_embedded)
+    : SecondaryIndexBuilder(comparator),
+      table_opt_(table_opt),  // 保存表选项
+      use_value_delta_encoding_(use_value_delta_encoding),  // 保存值增量编码选项
+      sec_index_columns_(sec_index_columns),
+      is_embedded_(is_embedded),  // 是否嵌入SST
+      sub_index_builder_(nullptr),  // 子索引构建器初始化为空
+      partition_cut_requested_(true),  // 初始时请求创建新分区
+      finishing_indexes(false),  // 初始时未开始完成索引
+      index_block_builder_(table_opt.index_block_restart_interval,  // 备用构建器
+                           true /*use_delta_encoding*/, 
+                           use_value_delta_encoding) {}
+
+HashSecondaryIndexBuilder::~HashSecondaryIndexBuilder() {
+  delete sub_index_builder_;  // 释放子索引构建器
+}
+
+void HashSecondaryIndexBuilder::MakeNewSubIndexBuilder() {
+  assert(sub_index_builder_ == nullptr);
+  sub_index_builder_ = new BlockBuilder(
+      table_opt_.index_block_restart_interval,  // 重启间隔
+      true /*use_delta_encoding*/,  // 启用增量编码
+      use_value_delta_encoding_);  // 值增量编码选项
+
+  flush_policy_.reset(FlushBlockBySizePolicyFactory::NewFlushBlockPolicy(
+      table_opt_.metadata_block_size,  // 元数据块大小（512 字节）
+      table_opt_.block_size_deviation,  // 偏差（10%）
+      *sub_index_builder_));  // 使用子索引构建器
+  partition_cut_requested_ = false;  // 重置分区切割请求标志
+  sub_index_first_key_.clear();  // 清空第一个 key
+}
+
+void HashSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\block_based\block_based_table_builder.cc调用的
+    Slice val_temp = Slice(value);  // 创建值的临时切片
+    std::vector<Slice> extracted_values;
+    WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值，value_temp是包含所有属性
+    
+    // 将 Slice 转换为 double（提取的是二级索引列的 double 值）
+    if (!extracted_values.empty() && extracted_values[0].size() == sizeof(double)) {
+      double sec_value = *reinterpret_cast<const double*>(extracted_values[0].data());
+      data_values_.emplace_back(sec_value);
+    }
+}
+
+void HashSecondaryIndexBuilder::AddIndexEntry( // data block满了才会调用
+    std::string* last_key_in_current_block,
+    const Slice* first_key_in_next_block, const BlockHandle& block_handle) {
+  (void) first_key_in_next_block;  // 避免报错
+  std::string datablcoklastkeystr = std::string(*last_key_in_current_block);
+  for (const double& v: data_values_) {
+    DataBlockEntry dbe;
+    dbe.datablockhandle = block_handle;
+    dbe.datablocklastkey = datablcoklastkeystr;
+    dbe.sec_value = serializeSecValues(v);
+    data_block_entries_.push_back(dbe);
+  }
+  data_values_.clear();
+}
+
+void HashSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool last) {
+  // 只处理嵌入式模式：将 (sec_value, BlockHandle) 添加到子索引块
+  // 每个索引块大小限制为 512 字节（通过 flush_policy_ 控制）
+  
+  if (UNLIKELY(last == true)) {
+    // 最后一个条目：直接添加并保存当前块
+    if (sub_index_builder_ == nullptr) {
+      MakeNewSubIndexBuilder();
+    }
+    
+    std::string handle_encoding;
+    datablkentry.datablockhandle.EncodeTo(&handle_encoding);
+    sub_index_builder_->Add(datablkentry.sec_value, handle_encoding);
+    
+    // 保存第一个 key（如果还没有）
+    if (sub_index_first_key_.empty()) {
+      sub_index_first_key_ = datablkentry.sec_value;
+    }
+    
+    // 将当前块添加到 entries_
+    entries_.push_back({
+      sub_index_first_key_,  // 块的第一个 key（最小值）
+      std::unique_ptr<BlockBuilder>(sub_index_builder_)
+    });
+    sub_index_builder_ = nullptr;
+    
+  } else {
+    // 非最后一个条目：检查是否需要 flush
+    if (sub_index_builder_ != nullptr) {
+      std::string handle_encoding;
+      datablkentry.datablockhandle.EncodeTo(&handle_encoding);
+      
+      // 检查是否需要刷新（块大小超过 512 字节）
+      bool do_flush = partition_cut_requested_ ||
+                     flush_policy_->Update(datablkentry.sec_value, handle_encoding);
+      
+      if (do_flush) {
+        // 刷新：保存当前块到 entries_
+        entries_.push_back({
+          sub_index_first_key_,
+          std::unique_ptr<BlockBuilder>(sub_index_builder_)
+        });
+        sub_index_builder_ = nullptr;
+      }
+    }
+    
+    // 如果没有子索引构建器，创建新的
+    if (sub_index_builder_ == nullptr) {
+      MakeNewSubIndexBuilder();
+    }
+    
+    // 添加条目到当前块
+    std::string handle_encoding;
+    datablkentry.datablockhandle.EncodeTo(&handle_encoding);
+    sub_index_builder_->Add(datablkentry.sec_value, handle_encoding);
+    
+    // 保存第一个 key（最小值）
+    if (sub_index_first_key_.empty()) {
+      sub_index_first_key_ = datablkentry.sec_value;
+    }
+    
+    // 更新索引大小
+    index_size_ = sub_index_builder_->CurrentSizeEstimate();
+  }
+}
+
+Status HashSecondaryIndexBuilder::Finish(
+    IndexBlocks* index_blocks, const BlockHandle& last_partition_block_handle) {
+  (void) last_partition_block_handle; // 避免报错
+  if (is_embedded_) {
+    // 嵌入式模式：需要把二级索引插入 SST
+    
+    if (finishing_indexes == false) {
+      // 第一次调用：排序并调用 AddIdxEntry 构建索引块
+      
+      // 根据 double 值大小对 data_block_entries_ 排序
+      data_block_entries_.sort([](const DataBlockEntry& a, const DataBlockEntry& b) {
+        // 反序列化 sec_value 为 double 进行比较
+        double a_val = *reinterpret_cast<const double*>(a.sec_value.data());
+        double b_val = *reinterpret_cast<const double*>(b.sec_value.data());
+        return a_val < b_val;  // 升序排序
+      });
+
+      for (const auto& entry : data_block_entries_) {
+        sec_entries_.emplace_back(std::make_pair(entry.sec_value, entry.datablockhandle));
+      }   
+      
+      // 遍历排序后的条目，调用 AddIdxEntry
+      if (!data_block_entries_.empty()) {
+        std::list<DataBlockEntry>::iterator it;
+        for (it = data_block_entries_.begin(); it != data_block_entries_.end(); ) {
+          // 先保存当前迭代器
+          std::list<DataBlockEntry>::iterator current = it;
+          ++it;  // 提前移动到下一个
+          
+          if (it == data_block_entries_.end()) {
+            // 当前是最后一个条目
+            AddIdxEntry(*current, true);
+          } else {
+            // 非最后一个条目
+            AddIdxEntry(*current, false);
+          }
+        }
+      }
+      
+      data_block_entries_.clear();
+      finishing_indexes = true;  // 标记已完成排序和块构建
+    }
+    
+    // 第一次及后续调用：从 entries_ 中取出一个块并写入 SST
+    if (!entries_.empty()) {
+      Entry& entry = entries_.front();
+      
+      // 调用 BlockBuilder 的 Finish() 生成索引块内容
+      const Slice block_contents = entry.value->Finish();
+      last_block_data_.assign(block_contents.data(), block_contents.size());
+      index_blocks->index_block_contents = Slice(last_block_data_);
+      index_size_ += last_block_data_.size();
+      
+      entries_.pop_front();  // 移除已处理的块
+      
+      // 如果还有更多块，返回 Incomplete
+      if (!entries_.empty()) {
+        return Status::Incomplete();
+      } else {
+        return Status::OK();  // 所有块都已写入
+      }
+    } else if (sub_index_builder_ != nullptr) {
+      // entries_ 为空但还有 sub_index_builder_ 中的数据（单层B树情况）
+      // 完成最后一个未刷新的索引块
+      const Slice block_contents = sub_index_builder_->Finish();
+      last_block_data_.assign(block_contents.data(), block_contents.size());
+      index_blocks->index_block_contents = Slice(last_block_data_);
+      index_size_ += last_block_data_.size();
+      delete sub_index_builder_;
+      sub_index_builder_ = nullptr;
+      return Status::OK();
+    } else {
+      // entries_ 和 sub_index_builder_ 都为空：真的没有数据
+      // 生成一个空的索引块（与R树保持一致的行为）
+      index_block_builder_.Reset();
+      index_blocks->index_block_contents = index_block_builder_.Finish();
+      return Status::OK();
+    }
+    
+  } else {
+    // 非嵌入式模式：直接将 data_block_entries_ 转换为 sec_entries_（不使用 AddIdxEntry）
+    for (const auto& entry : data_block_entries_) {
+      sec_entries_.emplace_back(std::make_pair(entry.sec_value, entry.datablockhandle));
+    }
+    data_block_entries_.clear();
+    
+    return Status::OK();
+  }
+}
+
+void HashSecondaryIndexBuilder::get_Secondary_Entries(
   std::vector<std::pair<std::string, BlockHandle>>* sec_entries) {
   // 仅用于非嵌入式全局二级索引模式
   *sec_entries = sec_entries_;

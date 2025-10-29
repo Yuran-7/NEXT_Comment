@@ -1006,7 +1006,10 @@ class Version {
   // (SecIndexType) Manually Changed is needed here
   typedef RTree<GlobalSecIndexValue, double, 1, double> GlobalSecRtree;
   GlobalSecRtree* global_rtree_;
-  // GlobalSecRtree global_rtree_;
+  typedef BPlusTree<double, BlockHandle> GlobalSecBTree;
+  GlobalSecBTree* global_btree_;
+  typedef GlobalSecRobinHood<double, BlockHandle> GlobalSecHash;
+  GlobalSecHash* global_hash_;
 
  private:
   Env* env_;
@@ -1513,7 +1516,12 @@ class VersionSet {
   typedef BPlusTree<double, BlockHandle> GlobalSecBTree; // key type may be changed
   GlobalSecBTree global_btree_;
   const char* global_btree_loc_ = "/NV1/ysh/NEXT/examples/testdb/global_btree";
- protected:
+
+  typedef GlobalSecRobinHood<double, BlockHandle> GlobalSecHash; // key type may be changed
+  GlobalSecHash global_hash_;
+  const char* global_hash_loc_ = "/NV1/ysh/NEXT/examples/testdb/global_hash";
+ 
+  protected:
   using VersionBuilderMap =
       UnorderedMap<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>>;
 

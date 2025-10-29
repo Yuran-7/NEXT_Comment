@@ -909,7 +909,8 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       global_sec_index(cf_options.create_global_sec_index),
       global_index_loc(cf_options.global_sec_index_loc),
       global_sec_index_is_spatial(cf_options.global_sec_index_is_spatial),
-      global_sec_index_is_btree(cf_options.global_sec_index_is_btree) {}
+      global_sec_index_is_btree(cf_options.global_sec_index_is_btree),
+      global_sec_index_is_hash(cf_options.global_sec_index_is_hash) {}
 
 ImmutableOptions::ImmutableOptions() : ImmutableOptions(Options()) {}
 
