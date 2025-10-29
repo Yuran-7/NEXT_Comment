@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
     // options.statistics = rocksdb::CreateDBStatistics();
 
     options.max_write_buffer_number = 5;  // 可变MemTable：1个（固定） + 不可变MemTable：4个（可变）
-    options.max_background_jobs = 8;   // max_flushes = 2, max_compactions = 6
+    options.max_background_jobs = 8;   // max_flushes = 2, max_compactions = 6，db/db_impl/db_impl_compaction_flush.cc，2548行
 
     BlockBasedTableOptions block_based_options;
 
@@ -380,7 +380,7 @@ int main(int argc, char* argv[]) {
 }
 
 /*
-g++ -g3 -O0 -std=c++17 \
+g++ -O3 -std=c++17 \
   -faligned-new -DHAVE_ALIGNED_NEW \
   -DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX \
   -DOS_LINUX -fno-builtin-memcmp \
@@ -392,7 +392,7 @@ g++ -g3 -O0 -std=c++17 \
   -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
   -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
   -fno-rtti secondary_index_data_write_num.cc \
-  -o secondary_index_data_write_num ../librocksdb_debug.a \
+  -o secondary_index_data_write_num ../librocksdb.a \
   -I../include -I.. \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */

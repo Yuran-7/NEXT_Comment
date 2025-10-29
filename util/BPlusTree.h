@@ -72,7 +72,7 @@ class BPlusTree {
   void InsertWithDelete(const Key& k, int filenum, const BlockHandle& handle, const std::vector<uint64_t>& delete_files, std::unordered_set<Key>& visited_keys) {
     Key sep{};
     Node* new_child = nullptr;
-    bool split = InsertRec(root_, k, filenum, handle, &sep, &new_child, delete_files, visited_keys);
+    bool split = InsertRecWithDelete(root_, k, filenum, handle, &sep, &new_child, delete_files, visited_keys);
     if (split) {  // 表示根节点发生了分裂
       // 根分裂：新建一层
       Node* new_root = new Node(false);
@@ -253,18 +253,11 @@ class BPlusTree {
     return false;
   }
 
-  bool InsertRec(Node* node, const Key& k, int filenum, const BlockHandle& handle, Key* sep, Node** new_right, const std::vector<uint64_t>& delete_files, std::unordered_set<Key>& visited_keys) {
+  bool InsertRecWithDelete(Node* node, const Key& k, int filenum, const BlockHandle& handle, Key* sep, Node** new_right, const std::vector<uint64_t>& delete_files, std::unordered_set<Key>& visited_keys) {
     if (node->is_leaf) {
       // 在叶子插入或追加
       auto it = std::lower_bound(node->keys.begin(), node->keys.end(), k);  // 返回第一个大于等于 k 的位置
       size_t pos = static_cast<size_t>(it - node->keys.begin());
-      if(visited_keys.find(k) == visited_keys.end()) {
-        visited_keys.insert(k);
-        for(const auto& del_file : delete_files) {
-          auto& m = node->vals[pos];
-          m.erase(static_cast<int>(del_file));
-        }
-      }
       if (it != node->keys.end() && *it == k) {
         // 命中：聚合到对应的 map<int, vector<BlockHandle>>
         auto& m = node->vals[pos];
@@ -275,7 +268,13 @@ class BPlusTree {
         auto& m = node->vals[pos];  // 获取刚刚初始化的map
         m[filenum].push_back(handle); // 添加
       }
-
+      if(visited_keys.find(k) == visited_keys.end()) {
+        visited_keys.insert(k);
+        for(const auto& del_file : delete_files) {
+          auto& m = node->vals[pos];
+          m.erase(static_cast<int>(del_file));
+        }
+      }
       if ((int)node->keys.size() > MAX_KEYS) {
         SplitLeaf(node, sep, new_right);
         return true;
@@ -287,7 +286,7 @@ class BPlusTree {
     size_t child_idx = UpperBoundChildIndex(node, k);
     Key child_sep{};
     Node* child_new_right = nullptr;
-    bool child_split = InsertRec(node->children[child_idx], k, filenum, handle, &child_sep, &child_new_right, delete_files, visited_keys);
+    bool child_split = InsertRecWithDelete(node->children[child_idx], k, filenum, handle, &child_sep, &child_new_right, delete_files, visited_keys);
     if (!child_split) return false;
 
     // 将子分裂上推的 sep 插入本节点

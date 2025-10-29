@@ -2468,14 +2468,14 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
     // sequence. Bail out here so we don't get into an endless loop of
     // scheduling BG work which will again call this function
     return;
-  } else if (shutting_down_.load(std::memory_order_acquire)) {
+  } else if (shutting_down_.load(std::memory_order_acquire)) {  // Close() 期间不调度新任务
     // DB is being deleted; no more background compactions
     return;
   }
   auto bg_job_limits = GetBGJobLimits();
   bool is_flush_pool_empty =
       env_->GetBackgroundThreads(Env::Priority::HIGH) == 0;
-  while (!is_flush_pool_empty && unscheduled_flushes_ > 0 &&
+  while (!is_flush_pool_empty && unscheduled_flushes_ > 0 &&  // unscheduled_flushes_是DBImpl的成员变量
          bg_flush_scheduled_ < bg_job_limits.max_flushes) {
     bg_flush_scheduled_++;
     FlushThreadArg* fta = new FlushThreadArg;

@@ -1301,15 +1301,15 @@ class VersionBuilder::Rep {
       const int level = deleted_file.first;
       const uint64_t file_number = deleted_file.second;
 
-      // if (maintain_secondary_index) {
-      //   const auto file_entries = GetSecValForTableFile(level, file_number);
-      //   auto inner_start = std::chrono::steady_clock::now();
-      //   for (const auto& entry : file_entries) {
-      //     global_btree_p->Delete(entry.first, static_cast<int>(file_number));
-      //   }
-      //   auto inner_end = std::chrono::steady_clock::now();
-      //   delete_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();
-      // }
+      if (maintain_secondary_index) {
+        const auto file_entries = GetSecValForTableFile(level, file_number);
+        auto inner_start = std::chrono::steady_clock::now();
+        for (const auto& entry : file_entries) {
+          global_btree_p->Delete(entry.first, static_cast<int>(file_number));
+        }
+        auto inner_end = std::chrono::steady_clock::now();
+        delete_inner_duration += std::chrono::duration_cast<std::chrono::microseconds>(inner_end - inner_start).count();
+      }
       delete_files.push_back(file_number);
       const Status s = ApplyFileDeletion(level, file_number);
       if (!s.ok()) {
@@ -1324,14 +1324,18 @@ class VersionBuilder::Rep {
       if (maintain_secondary_index) {
         const uint64_t filenumber = meta.fd.GetNumber();
         auto inner_start = std::chrono::steady_clock::now();
-        if(delete_files.size() == 0) {
-          for (const auto& entry : meta.SecVal) {
-            global_btree_p->Insert(entry.first, static_cast<int>(filenumber), entry.second);
-          }
-        } else {
-          for (const auto& entry : meta.SecVal) {
-            global_btree_p->InsertWithDelete(entry.first, static_cast<int>(filenumber), entry.second, delete_files, visited_values);
-          }         
+        // if(delete_files.size() == 0) {
+        //   for (const auto& entry : meta.SecVal) {
+        //     global_btree_p->Insert(entry.first, static_cast<int>(filenumber), entry.second);
+        //   }
+        // } else {
+        //   for (const auto& entry : meta.SecVal) {
+        //     global_btree_p->InsertWithDelete(entry.first, static_cast<int>(filenumber), entry.second, delete_files, visited_values);
+        //   }         
+        // }
+        
+        for (const auto& entry : meta.SecVal) {
+          global_btree_p->Insert(entry.first, static_cast<int>(filenumber), entry.second);
         }
 
         auto inner_end = std::chrono::steady_clock::now();
