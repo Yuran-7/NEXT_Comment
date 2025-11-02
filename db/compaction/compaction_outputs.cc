@@ -15,6 +15,9 @@
 namespace ROCKSDB_NAMESPACE {
 
 void CompactionOutputs::NewBuilder(const TableBuilderOptions& tboptions) {
+  // Record whether global secondary index is enabled in the TableBuilderOptions
+  // so that Finish() can conditionally extract secondary index entries.
+  builder_global_sec_index_ = tboptions.ioptions.global_sec_index;
   builder_.reset(NewTableBuilder(tboptions, file_writer_.get()));
 }
 
@@ -31,10 +34,16 @@ Status CompactionOutputs::Finish(const Status& intput_status,
                                           meta->oldest_ancester_time);
     s = builder_->Finish();
 
-    std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
-    builder_->GetSecondaryEntries(&secondary_index_entries);
-    s = meta->UpdateSecEntries(secondary_index_entries);
-    secondary_index_entries.clear();
+    // If the table builder was created with global secondary index enabled,
+    // extract the secondary index entries from the builder and attach them
+    // to the file metadata. This mirrors the behavior in builder.cc where
+    // the check is based on tboptions.ioptions.global_sec_index.
+    if (builder_global_sec_index_) {
+      std::vector<std::pair<std::string, BlockHandle>> secondary_index_entries;
+      builder_->GetSecondaryEntries(&secondary_index_entries);
+      s = meta->UpdateSecEntries(secondary_index_entries);
+      secondary_index_entries.clear();
+    }
 
   } else {
     builder_->Abandon();

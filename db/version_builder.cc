@@ -1768,10 +1768,10 @@ class VersionBuilder::Rep {
     assert(table_cache_ != nullptr);
 
     size_t table_cache_capacity = table_cache_->get_cache()->GetCapacity();
-    bool always_load = (table_cache_capacity == TableCache::kInfiniteCapacity);
+    bool always_load = (table_cache_capacity == TableCache::kInfiniteCapacity); // 0x400000，4194304
     size_t max_load = std::numeric_limits<size_t>::max();
 
-    if (!always_load) {
+    if (!always_load) { // 不进入
       // If it is initial loading and not set to always loading all the
       // files, we only load up to kInitialLoadLimit files, to limit the
       // time reopening the DB.
@@ -1835,17 +1835,17 @@ class VersionBuilder::Rep {
             true /* record_read_stats */,
             internal_stats->GetFileReadHist(level), false, level,
             prefetch_index_and_filter_in_cache, max_file_size_for_l0_meta_pin,
-            file_meta->temperature);
+            file_meta->temperature);  // 创建TableReader并缓存到TableCache中
         if (file_meta->table_reader_handle != nullptr) {
           // Load table_reader
           file_meta->fd.table_reader = table_cache_->GetTableReaderFromHandle(
-              file_meta->table_reader_handle);
+              file_meta->table_reader_handle);  // 把table_reader放到FileMetaData中，上面也放到了缓存中
         }
       }
     });
 
     std::vector<port::Thread> threads;
-    for (int i = 1; i < max_threads; i++) {
+    for (int i = 1; i < max_threads; i++) { // 前两个线程就把所有的文件都加载完了
       threads.emplace_back(load_handlers_func);
     }
     load_handlers_func();

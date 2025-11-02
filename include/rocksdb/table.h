@@ -416,7 +416,7 @@ struct BlockBasedTableOptions {
   // Use partitioned full filters for each SST file. This option is
   // incompatible with block-based filters. Filter partition blocks use
   // block cache even when cache_index_and_filter_blocks=false.
-  bool partition_filters = false;
+  bool partition_filters = false; // 需要和kTwoLevelIndexSearch配合使用
 
   // Option to generate Bloom/Ribbon filters that minimize memory
   // internal fragmentation.
@@ -574,11 +574,11 @@ struct BlockBasedTableOptions {
     // key, which is the upper bound of the whole file.
     kShortenSeparators,
     // Shorten both keys between blocks and key after last block.
-    kShortenSeparatorsAndSuccessor,
+    kShortenSeparatorsAndSuccessor, // 两个模式的差别在于最后一个索引条目（最后一个data block）是否也做短化
   };
 
   IndexShorteningMode index_shortening =
-      IndexShorteningMode::kShortenSeparators;
+      IndexShorteningMode::kShortenSeparators;  // 默认最后一个索引条目不做短化，写为完整的最大键 full key
 
   // RocksDB does auto-readahead for iterators on noticing more than two reads
   // for a table file if user doesn't provide readahead_size. The readahead

@@ -914,10 +914,10 @@ void RtreeSecondaryIndexBuilder::get_Secondary_Entries(
 
 OneDRtreeSecondaryIndexBuilder* OneDRtreeSecondaryIndexBuilder::CreateIndexBuilder(  // 创建一维R树辅助索引构建器的工厂方法
     const InternalKeyComparator* comparator,  // 内部键比较器
-    const bool use_value_delta_encoding,  // 是否使用值增量编码
+    const bool use_value_delta_encoding,  // 是否使用值增量编码，true
     const BlockBasedTableOptions& table_opt,
     const std::vector<Slice>& sec_index_columns) {
-  return new OneDRtreeSecondaryIndexBuilder(comparator, table_opt,  // 返回新创建的一维R树辅助索引构建器实例
+  return new OneDRtreeSecondaryIndexBuilder(comparator, table_opt,
                                      use_value_delta_encoding,
                                      sec_index_columns);
 }
@@ -945,12 +945,12 @@ void OneDRtreeSecondaryIndexBuilder::MakeNewSubIndexBuilder() {  // 创建新的
   assert(sub_index_builder_ == nullptr);
   sub_index_builder_ = new OneDRtreeSecondaryIndexLevelBuilder(  // 创建新的一维R树辅助索引层级构建器
       comparator_, table_opt_.index_block_restart_interval,  // 1
-      table_opt_.format_version, use_value_delta_encoding_,
+      table_opt_.format_version, use_value_delta_encoding_, // 5, true
       table_opt_.index_shortening, /* include_first_key */ false);
 
   flush_policy_.reset(FlushBlockBySizePolicyFactory::NewFlushBlockPolicy(  // 重置刷新策略
       table_opt_.metadata_block_size, table_opt_.block_size_deviation,  // 元数据块大小(512)和偏差(10)
-      sub_index_builder_->index_block_builder_));  // 使用子索引构建器的块构建器
+      sub_index_builder_->index_block_builder_));  // BlockBuilder
   partition_cut_requested_ = false;  // 重置分区切割请求标志
 }
 
@@ -958,7 +958,7 @@ void OneDRtreeSecondaryIndexBuilder::RequestPartitionCut() {  // 请求切割分
   partition_cut_requested_ = true;  // 设置分区切割请求标志为真
 }
 
-void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\block_based\block_based_table_builder.cc调用的
+void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table/block_based/block_based_table_builder.cc调用的
     Slice val_temp = Slice(value);  // 创建值的临时切片
     std::vector<Slice> extracted_values;
     WideColumnSerialization::GetValuesByColumnNames(val_temp, sec_index_columns_, extracted_values);  // 提取指定列的值，value_temp是包含所有属性
@@ -969,7 +969,7 @@ void OneDRtreeSecondaryIndexBuilder::OnKeyAdded(const Slice& value) {  // table\
     tuple_valranges_.emplace_back(temp_val_range);
 }
 
-void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table\block_based\block_based_table_builder.cc调用的，data block满了才会调用
+void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table/block_based/block_based_table_builder.cc调用的，data block满了才会调用
     std::string* last_key_in_current_block,  // 当前数据块的最后一个key，注意是key，不是value
     const Slice* first_key_in_next_block, const BlockHandle& block_handle) {  // 当前数据块的句柄
   (void) first_key_in_next_block;  // 不需要
@@ -985,21 +985,21 @@ void OneDRtreeSecondaryIndexBuilder::AddIndexEntry( // table\block_based\block_b
 }
 
 
-void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool last) {  // 将数据块条目添加到辅助索引（对应算法第8-10行）
+void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bool last) {
   expandValrange(enclosing_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 把第二个参数解析出来，让第一个参数拓展
   // std::cout << "enclosing_mbr_: " << enclosing_mbr_ << std::endl;
   // Note: to avoid two consecuitive flush in the same method call, we do not
   // check flush policy when adding the last key
 
-  expandValrange(temp_sec_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 扩展临时辅助值范围
+  expandValrange(temp_sec_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));
   if (temp_sec_valrange_.range.max-temp_sec_valrange_.range.min > 0.005 && !sec_enclosing_valrange_.empty()) {  // 如果临时范围跨度超过阈值0.005且辅助包围范围非空
-    sec_valranges_.emplace_back(serializeValueRange(sec_enclosing_valrange_));  // 保存当前辅助包围范围（用于全局索引）
+    sec_valranges_.emplace_back(serializeValueRange(sec_enclosing_valrange_));  // 添加到数组中
     sec_enclosing_valrange_.clear();  // 清空辅助包围范围
     temp_sec_valrange_.clear();  // 清空临时辅助范围
-    expandValrange(temp_sec_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 重新开始扩展临时范围
+    expandValrange(temp_sec_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 相当于取消了994行的操作
   }
 
-  expandValrange(sec_enclosing_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));  // 扩展辅助包围值范围
+  expandValrange(sec_enclosing_valrange_, ReadValueRange(datablkentry.subindexenclosingvalrange));
 
   if (UNLIKELY(last == true)) {  // 如果这是最后一个条目（对应算法处理最后一个数据块）
     if (sub_index_builder_ == nullptr) {  // 如果子索引构建器为空
@@ -1026,23 +1026,23 @@ void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bo
     if (sub_index_builder_ != nullptr) {
       std::string handle_encoding;  // 句柄编码字符串
       std::string enclosing_valrange_encoding;  // 包围值范围编码字符串
-      enclosing_valrange_encoding = serializeValueRange(enclosing_valrange_);  // 序列化包围值范围
-      datablkentry.datablockhandle.EncodeTo(&handle_encoding);  // 编码数据块句柄
-      bool do_flush =  // 判断是否需要刷新（对应算法第11行：if SB.size() > δ）
+      enclosing_valrange_encoding = serializeValueRange(enclosing_valrange_);  // Update函数的key
+      datablkentry.datablockhandle.EncodeTo(&handle_encoding);  // Update函数的value
+      bool do_flush =
           partition_cut_requested_ ||  // 请求了分区切割
-          flush_policy_->Update(enclosing_valrange_encoding, handle_encoding);  // 或刷新策略要求刷新
+          flush_policy_->Update(enclosing_valrange_encoding, handle_encoding);  // flush_policy_每次创建新的子索引构建器时都会被重置
       if (do_flush) {  // 如果需要刷盘（对应算法第12-14行）
 
-        sec_valranges_.emplace_back(serializeValueRange(sec_enclosing_valrange_));  // 保存辅助包围范围
-        sec_enclosing_valrange_.clear();  // 清空辅助包围范围
-        temp_sec_valrange_.clear();  // 清空临时辅助范围
+        sec_valranges_.emplace_back(serializeValueRange(sec_enclosing_valrange_));  // 最后添加一次到数组中
+        sec_enclosing_valrange_.clear();
+        temp_sec_valrange_.clear();
 
         // std::cout << "push_back a full sub_index builder" << std::endl;
         // std::cout << "pushed valuerange: " << enclosing_valrange_ << std::endl;
-        entries_.push_back(  // 将当前子索引添加到条目列表（对应算法第12行：S ← SB; flush到SST）
-            {serializeValueRange(enclosing_valrange_),  // 包围值范围作为索引键
+        entries_.push_back(
+            {serializeValueRange(enclosing_valrange_),  // 512B包围值范围作为键，感觉有点bug，这里是0-18的范围，下面却只有0-17的内容
              std::unique_ptr<OneDRtreeSecondaryIndexLevelBuilder>(sub_index_builder_),  // 子索引构建器
-             sec_valranges_});  // 在一维的情况下，这个参数和第一个参数实际上是一样的
+             sec_valranges_});  // 数组
         sec_valranges_.clear();
         enclosing_valrange_.clear();
         sub_index_builder_ = nullptr;  // 重置子索引构建器
@@ -1058,8 +1058,8 @@ void OneDRtreeSecondaryIndexBuilder::AddIdxEntry(DataBlockEntry datablkentry, bo
 }
 
 
-Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
-    IndexBlocks* index_blocks, const BlockHandle& last_partition_block_handle) {  // 索引块和最后一个分区块句柄
+Status OneDRtreeSecondaryIndexBuilder::Finish(
+    IndexBlocks* index_blocks, const BlockHandle& last_partition_block_handle) {  // index_blocks是需要获取的，第二个参数，第一次调用Finish没有用，后续调用Finish才会起作用
 
   if (finishing_indexes == false) {  // 只有第一次调用才会进入
     
@@ -1114,19 +1114,18 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     Entry& last_entry = entries_.front();  // 【关键】获取第一个条目（这个条目就是之前push_back到entries_的）
 
     if (firstlayer == true) {  // 如果是第一层（叶子层）
-      for (const std::string& sec_val_s: last_entry.sec_value){  // last_entry是SST中的一个二级索引block，sec_value是一个vector，一维情况下，vector中只要一个数据，就是整个block的value范围
-        sec_entries_.emplace_back(std::make_pair(sec_val_s, last_partition_block_handle));  // 【GL生成】添加到全局索引GL（对应算法第13行：GL ← <SB.val_range, SB.location>）
-                                                                                              // last_partition_block_handle是上一次Finish()返回的BlockHandle，表示该子索引块在SST中的位置
+      for (const std::string& sec_val_s: last_entry.sec_value){  // last_entry是SST中的一个二级索引block，sec_value是一个vector
+        sec_entries_.emplace_back(std::make_pair(sec_val_s, last_partition_block_handle));  // last_partition_block_handle是上一次Finish()返回的BlockHandle，表示该子索引块在SST中的位置
       }
       // sec_entries_.emplace_back(std::make_pair(last_entry.key, last_partition_block_handle));
     }
 
     if (sub_index_builder_ != nullptr) {    // 如果子索引构建器存在
-      std::string handle_encoding;  // 句柄编码
+      std::string handle_encoding;
       last_partition_block_handle.EncodeTo(&handle_encoding);  // 编码最后一个分区块句柄
-      bool do_flush =  // 判断是否需要刷新
-          partition_cut_requested_ ||  // 请求了分区切割
-          flush_policy_->Update(last_entry.key, handle_encoding);  // 或刷新策略要求刷新
+      bool do_flush =
+          partition_cut_requested_ ||
+          flush_policy_->Update(last_entry.key, handle_encoding);
       if (do_flush) {  // 如果需要刷新
         // std::cout << "enclosing_mbr: " << enclosing_mbr_ << std::endl;
         next_level_entries_.push_back(  // 添加到下一层条目列表（构建上层R树节点）
@@ -1145,7 +1144,7 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     entries_.pop_front();  // 【关键】移除已处理的第一个条目（下次循环处理下一个）
   }
   // If the current R-tree level has been constructed, move on to the next level.
-  if (UNLIKELY(entries_.empty())) {  // UNLIKELY表示这种情况不常发生，是一个分支预测提示宏，即使entries_为空，由于下面的else还是返回Status::Incomplete()，所以这个if一定会进入，且是最后一次进入
+  if (UNLIKELY(entries_.empty())) {  // UNLIKELY表示这种情况不常发生，是一个分支预测提示宏，即使entries_为空，由于下面的else还是返回Status::Incomplete()，所以这个if一定会进入
 
     // update R-tree height
     rtree_level_++;  // 增加R树层级
@@ -1162,15 +1161,14 @@ Status OneDRtreeSecondaryIndexBuilder::Finish(  // 完成辅助索引构建
     // return if current level only contains one block
     // std::cout << "next_level_entries_ size: " << next_level_entries_.size() << std::endl;
     if (next_level_entries_.size() == 1) {  // 如果下一层只有一个条目（R树已到根节点）
-      Entry& entry = next_level_entries_.front();  // 获取唯一的条目
+      Entry& entry = next_level_entries_.front();
       auto s = entry.value->Finish(index_blocks);  // 调用子索引构建器的Finish()，本质上调用BlockBuilder的Finish()
       // std::cout << "writing the top-level index block with enclosing valuerange: " << ReadValueRange(entry.key) << std::endl;
       index_size_ += index_blocks->index_block_contents.size();  // 累加索引大小
       PutVarint32(&rtree_height_str_, rtree_level_);  // 记录R树高度
       index_blocks->meta_blocks.insert(  // 将R树高度插入元数据块
         {kRtreeSecondaryIndexMetadataBlock.c_str(), rtree_height_str_});
-      // std::cout << "R-tree height: " << rtree_level_ << std::endl;
-      return s;  // 直接返回
+      return s;  // 直接返回，s.ok()为true，表示完成
     }
 
     // swaping the contents of entries_ and next_level_entries
@@ -1397,7 +1395,7 @@ Status BtreeSecondaryIndexBuilder::Finish(
         }
       }
       
-      data_block_entries_.clear();
+      data_block_entries_.clear();  // 挺关键，因为占内存很大
       finishing_indexes = true;  // 标记已完成排序和块构建
     }
     

@@ -115,7 +115,7 @@ void IndexValue::EncodeTo(std::string* dst, bool have_first_key,
     //                               BlockBasedTable::kBlockTrailerSize);
     PutVarsignedint64(dst, handle.size() - previous_handle->size());
   } else {
-    handle.EncodeTo(dst);
+    handle.EncodeTo(dst); // 把handle编码成一个字符串
   }
   assert(dst->size() != 0);
 

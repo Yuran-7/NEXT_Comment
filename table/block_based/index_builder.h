@@ -1100,29 +1100,29 @@ class OneDRtreeSecondaryIndexLevelBuilder : public SecondaryIndexBuilder {
   }
 
   virtual void AddIndexEntry(const BlockHandle& block_handle,
-                             std::string enclosing_valrange_string) { // AddIdxEntry函数内调用sub_index_builder_->AddIndexEntry
+                             std::string enclosing_valrange_string) {
     // Encode the block handle and construct leaf node
     // std::string handle_encoding;
     // block_handle.EncodeTo(&handle_encoding);
     // LeafNode leaf_node = LeafNode{enclosing_mbb_, handle_encoding};
     // leaf_nodes_.push_back(leaf_node);
 
-    IndexValue entry(block_handle, current_block_first_internal_key_);
+    IndexValue entry(block_handle, current_block_first_internal_key_);  // 包含BlockHandle handle和Slice first_internal_key;
     std::string encoded_entry;
     std::string delta_encoded_entry;
-    entry.EncodeTo(&encoded_entry, include_first_key_, nullptr);
-    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {  // 不进入
+    entry.EncodeTo(&encoded_entry, include_first_key_, nullptr);  // include_first_key_默认为false，encoded_entry占6字节长
+    if (use_value_delta_encoding_ && !last_encoded_handle_.IsNull()) {  // 第一次不进入，后续会进入
       entry.EncodeTo(&delta_encoded_entry, include_first_key_,
-                     &last_encoded_handle_);
+                     &last_encoded_handle_);  // delta_encoded_entry是变长有符号int64
     } else {
       // If it's the first block, or delta encoding is disabled,
       // BlockBuilder::Add() below won't use delta-encoded slice.
     }
     last_encoded_handle_ = block_handle;
     const Slice delta_encoded_entry_slice(delta_encoded_entry);
-    index_block_builder_.Add(Slice(enclosing_valrange_string), encoded_entry, &delta_encoded_entry_slice);  // 往buffer_中写入条目，key是[min, max]，value是编码后的IndexValue
+    index_block_builder_.Add(Slice(enclosing_valrange_string), encoded_entry, &delta_encoded_entry_slice);  // 往BlockBuilder的buffer_中写入条目，key是[min, max]，value可能是后面两个参数的一个
 
-    enclosing_valrange_.clear();
+    enclosing_valrange_.clear();  // 感觉这一步有点没用
   }
 
   using SecondaryIndexBuilder::Finish;
@@ -1215,15 +1215,15 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
 
  private:
   // Set after ::Finish is called
-  size_t top_level_index_size_ = 0;
+  size_t top_level_index_size_ = 0; // 没有用到
   // Set after ::Finish is called
   size_t partition_cnt_ = 0;
 
   void MakeNewSubIndexBuilder();
 
   struct Entry {
-    std::string key;
-    std::unique_ptr<OneDRtreeSecondaryIndexLevelBuilder> value;
+    std::string key;  // 512B粗粒度范围
+    std::unique_ptr<OneDRtreeSecondaryIndexLevelBuilder> value; // 每一个512B的block对应一个子索引构建器
     // Entry& operator=(Entry& other) {
     //     if (this != &other) {
     //         key = other.key;
@@ -1231,29 +1231,29 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
     //     }
     //     return *this;
     // }
-    std::vector<std::string> sec_value;
+    std::vector<std::string> sec_value; // 细粒度范围，是一个数组
   };
   struct DataBlockEntry {
     BlockHandle datablockhandle;
-    std::string datablocklastkey;
+    std::string datablocklastkey; // 几乎没有用到
     std::string subindexenclosingvalrange;
   };
   void AddIdxEntry(DataBlockEntry datablkentry, bool last=false);
-  DataBlockEntry last_index_entry_;
+  DataBlockEntry last_index_entry_; // 没有用到
 
   std::list<Entry> entries_;  // list of partitioned indexes and their keys
   std::list<Entry> next_level_entries_;  // list of partitioned indexes and their keys
   std::list<DataBlockEntry> data_block_entries_;
 
-  std::vector<ValueRange> tuple_valranges_; // for secondary index building
+  std::vector<ValueRange> tuple_valranges_; // 一个data block写满就会清理一次
   std::vector<std::pair<std::string, BlockHandle>> sec_entries_; // for secondary global index
 
   BlockBuilder index_block_builder_;  // 没有被使用
   // the active partition index builder
   OneDRtreeSecondaryIndexLevelBuilder* sub_index_builder_;
   // the last key in the active partition index builder
-  std::string sub_index_last_key_;
-  std::unique_ptr<FlushBlockPolicy> flush_policy_;
+  std::string sub_index_last_key_;  // 不清楚有什么作用，感觉没什么作用
+  std::unique_ptr<FlushBlockPolicy> flush_policy_;  // 每生成一个新的子迭代器就会reset一次
   // true if Finish is called once but not complete yet.
   bool finishing_indexes = false;
   bool firstlayer = true;
@@ -1267,9 +1267,9 @@ class OneDRtreeSecondaryIndexBuilder : public SecondaryIndexBuilder {
   BlockHandle last_encoded_handle_;
   ValueRange sub_index_enclosing_valrange_;
   ValueRange enclosing_valrange_; // 粗粒度（整个子索引块的总范围）512B
-  ValueRange sec_enclosing_valrange_;
+  ValueRange sec_enclosing_valrange_; // 为了构造sec_valranges_数组
   std::vector<std::string> sec_valranges_;  // 细粒度（满足条件下，子索引块内部的多个小范围）
-  ValueRange temp_sec_valrange_;
+  ValueRange temp_sec_valrange_;  // 我感觉是有一点多余，只需要sec_enclosing_valrange_就可以了
   uint32_t rtree_level_;
   std::string rtree_height_str_;
 

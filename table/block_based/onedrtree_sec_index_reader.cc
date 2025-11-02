@@ -31,25 +31,25 @@ Status OneDRtreeSecIndexReader::Create(
 
   CachableEntry<Block> index_block;
   // std::cout << "create rtreesecindexreader" << std::endl;
-  if (prefetch || !use_cache) {
+  if (prefetch || !use_cache) { // prefetch = false，use_cache = false，进入
     // std::cout << "start reading index block" << std::endl;
 
     const Status s = 
           ReadSecIndexBlock(table, prefetch_buffer, ro, use_cache,
                           /*get_context=*/nullptr, lookup_context, &index_block,
-                          meta_index_iter);
+                          meta_index_iter); // table/block_based/index_reader_common.cc 37行
     
 
     if (!s.ok()) {
       return s;
     }
 
-    if (use_cache && !pin) {
+    if (use_cache && !pin) {  // use_cache = false，pin = false，不进入
       index_block.Reset();
     }
   }
 
-  index_reader->reset(new OneDRtreeSecIndexReader(table, std::move(index_block)));
+  index_reader->reset(new OneDRtreeSecIndexReader(table, std::move(index_block)));  // : IndexReaderCommon(t, std::move(index_block))，最终把index_block的内容传到IndexReaderCommon的成员变量index_block_
 
   // std::cout << "get rtree index meta block" << std::endl;
 

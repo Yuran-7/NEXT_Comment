@@ -173,7 +173,7 @@ Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使�
           ioptions.file_checksum_gen_factory.get(),
           tmp_set.Contains(FileType::kTableFile), false));
 
-      builder = NewTableBuilder(tboptions, file_writer.get());
+      builder = NewTableBuilder(tboptions, file_writer.get());  // 316行，builder对象会删除
     }
 
     MergeHelper merge(
@@ -313,7 +313,7 @@ Status BuildTable(  // 其实只有从Memtable flush到磁盘的时候才会使�
         *table_properties = tp;
       }
     }
-    delete builder;
+    delete builder; // builder只有一个成员变量Rep，它会直接调用delete rep_;
 
     // Finish and check for file errors
     TEST_SYNC_POINT("BuildTable:BeforeSyncTable");

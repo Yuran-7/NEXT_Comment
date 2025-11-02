@@ -154,7 +154,7 @@ class BlockBasedTableBuilder : public TableBuilder {
   struct Rep;
   class BlockBasedTablePropertiesCollectorFactory;
   class BlockBasedTablePropertiesCollector;
-  Rep* rep_;
+  Rep* rep_;  // 这是 Pimpl 惯用法（Pointer to Implementation）的典型实现，可以精简头文件，少include，缩短编译时间
 
   struct ParallelCompressionRep;
 

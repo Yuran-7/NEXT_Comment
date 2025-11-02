@@ -611,13 +611,13 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   ro.rate_limiter_priority = read_options.rate_limiter_priority;
 
   // prefetch both index and filters, down to all partitions
-  const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0;
-  const bool preload_all = !table_options.cache_index_and_filter_blocks;
+  const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0; // prefetch_index_and_filter_in_cache是false
+  const bool preload_all = !table_options.cache_index_and_filter_blocks;  // true，全部放到table_reader，而不放到缓存中，内存占用高
 
-  if (!ioptions.allow_mmap_reads) {
+  if (!ioptions.allow_mmap_reads) { // 进入
     s = PrefetchTail(ro, file.get(), file_size, force_direct_prefetch,
                      tail_prefetch_stats, prefetch_all, preload_all,
-                     &prefetch_buffer);
+                     &prefetch_buffer); // 预读文件尾部，默认预读512KB（如果prefetch_all为true）
     // Return error in prefetch path to users.
     if (!s.ok()) {
       return s;
@@ -779,7 +779,7 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   if (!s.ok()) {
     return s;
   }
-  s = new_table->PrefetchIndexAndFilterBlocks(
+  s = new_table->PrefetchIndexAndFilterBlocks(  // 992行
       ro, prefetch_buffer.get(), metaindex_iter.get(), new_table.get(),
       prefetch_all, table_options, level, file_size,
       max_file_size_for_l0_meta_pin, &lookup_context);
@@ -840,8 +840,8 @@ Status BlockBasedTable::PrefetchTail(
     prefetch_off = 0;
     prefetch_len = static_cast<size_t>(file_size);
   } else {
-    prefetch_off = static_cast<size_t>(file_size - tail_prefetch_size);
-    prefetch_len = tail_prefetch_size;
+    prefetch_off = static_cast<size_t>(file_size - tail_prefetch_size); // 从这开始
+    prefetch_len = tail_prefetch_size;  // 读512KB
   }
   TEST_SYNC_POINT_CALLBACK("BlockBasedTable::Open::TailPrefetchLen",
                            &tail_prefetch_size);
@@ -849,18 +849,18 @@ Status BlockBasedTable::PrefetchTail(
   // Try file system prefetch
   if (!file->use_direct_io() && !force_direct_prefetch) {
     if (!file->Prefetch(prefetch_off, prefetch_len, ro.rate_limiter_priority)
-             .IsNotSupported()) {
+             .IsNotSupported()) { // 进入
       prefetch_buffer->reset(new FilePrefetchBuffer(
           0 /* readahead_size */, 0 /* max_readahead_size */,
-          false /* enable */, true /* track_min_offset */));
-      return Status::OK();
+          false /* enable */, true /* track_min_offset */));  // enable = false：只是一个占位/统计对象（没有把数据读到用户缓冲里），真实的数据若有则位于内核的 page cache（由 file->Prefetch() 填充），prefetch_buffer 本身不保存数据
+      return Status::OK();  // 直接return
     }
   }
 
   // Use `FilePrefetchBuffer`
   prefetch_buffer->reset(
       new FilePrefetchBuffer(0 /* readahead_size */, 0 /* max_readahead_size */,
-                             true /* enable */, true /* track_min_offset */));
+                             true /* enable */, true /* track_min_offset */));  // 当 enable == true 时,FilePrefetchBuffer::Prefetch 发起读（可能是直接 I/O 或普通 read），把指定范围的数据拷贝到用户缓冲区（FilePrefetchBuffer 内部的一段内存）
 
   IOOptions opts;
   Status s = file->PrepareIOOptions(ro, opts);
@@ -1155,7 +1155,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
       }
       s = new_table->CreateSecIndexReader(ro, is_sec_index_spatial, prefetch_buffer, meta_iter, use_cache,
                                       prefetch_index, pin_index, lookup_context,
-                                      &sec_index_reader);
+                                      &sec_index_reader); // 2823行
 
       if (!s.ok()) {return s;}
 
@@ -2820,10 +2820,10 @@ Status BlockBasedTable::CreateIndexReader(
   // }
 }
 
-Status BlockBasedTable::CreateSecIndexReader(
+Status BlockBasedTable::CreateSecIndexReader( // 1156行调用
     const ReadOptions& ro, bool is_sec_index_spatial,
-    FilePrefetchBuffer* prefetch_buffer,
-    InternalIterator* meta_iter, bool use_cache, bool prefetch, bool pin,
+    FilePrefetchBuffer* prefetch_buffer,  // prefetch_buffer.get()，782行
+    InternalIterator* meta_iter, bool use_cache, bool prefetch, bool pin, // prefetch_all
     BlockCacheLookupContext* lookup_context,
     std::unique_ptr<IndexReader>* sec_index_reader) {
   // std::cout << "start CreateSecIndexReader"  << std::endl;

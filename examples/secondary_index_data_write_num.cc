@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
     block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // kOneDRtreeSec，kBtreeSec，kRtreeSec，kHashSec
     
     // For global secondary index in memory
-    options.create_global_sec_index = true;  // 初始化options/cf_options.cc下的ImmutableCFOptions的global_sec_index
+     options.create_global_sec_index = true;  // 初始化options/cf_options.cc下的ImmutableCFOptions的global_sec_index
     //options.global_sec_index_is_btree =true;
     //options.global_sec_index_is_hash = true;
     // To indicate the index attribute type
@@ -398,9 +398,27 @@ g++ -O3 -std=c++17 \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
 
+/*
+g++ -g3 -O0 -std=c++17 \
+  -faligned-new -DHAVE_ALIGNED_NEW \
+  -DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX \
+  -DOS_LINUX -fno-builtin-memcmp \
+  -DROCKSDB_FALLOCATE_PRESENT -DSNAPPY -DGFLAGS=1 \
+  -DZLIB -DBZIP2 -DLZ4 -DZSTD -DNUMA -DTBB \
+  -DROCKSDB_MALLOC_USABLE_SIZE -DROCKSDB_PTHREAD_ADAPTIVE_MUTEX \
+  -DROCKSDB_BACKTRACE -DROCKSDB_RANGESYNC_PRESENT \
+  -DROCKSDB_SCHED_GETCPU_PRESENT -DROCKSDB_AUXV_GETAUXVAL_PRESENT \
+  -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
+  -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
+  -fno-rtti secondary_index_data_write_num.cc \
+  -o secondary_index_data_write_num ../librocksdb_debug.a \
+  -I../include -I.. \
+  -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
+ */ 
+
 
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 33000000 /NV1/ysh/dataset/osm_building.csv
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m.csv
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 1000000 /NV1/ysh/dataset/buildings_1m/buildings_1m_10.csv
 // ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 10000000 /NV1/ysh/dataset/buildings_10m.csv
-// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 10000000 /NV1/ysh/dataset/buildings_10m_10.csv
+// ./secondary_index_data_write_num /NV1/ysh/NEXT/examples/testdb 10000000 /NV1/ysh/dataset/buildings_10m_50.csv

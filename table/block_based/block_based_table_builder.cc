@@ -260,7 +260,7 @@ struct BlockBasedTableBuilder::Rep {
   const MutableCFOptions moptions;
   const BlockBasedTableOptions table_options;
   const InternalKeyComparator& internal_comparator;
-  WritableFileWriter* file;
+  WritableFileWriter* file; // file/writable_file_writer.h
   std::atomic<uint64_t> offset;
   size_t alignment;
   BlockBuilder data_block;
@@ -444,7 +444,7 @@ struct BlockBasedTableBuilder::Rep {
         reason(tbo.reason),
         flush_block_policy(
             table_options.flush_block_policy_factory->NewFlushBlockPolicy(
-                table_options, data_block)),
+                table_options, data_block)),  // data_block是BlockBuilder对象，初始化创建的 flush_block_policy 只用于控制 data block 何时 flush（何时把当前 data block 写出）；它不直接管理 index block 或 filter block 的写入
         status_ok(true),
         io_status_ok(true) {
     if (tbo.target_file_size == 0) {
@@ -905,7 +905,7 @@ BlockBasedTableBuilder::BlockBasedTableBuilder(
     sanitized_table_options.format_version = 1;
   }
 
-  rep_ = new Rep(sanitized_table_options, tbo, file); // 关键
+  rep_ = new Rep(sanitized_table_options, tbo, file); // 关键，258行
 
   TEST_SYNC_POINT_CALLBACK(
       "BlockBasedTableBuilder::BlockBasedTableBuilder:PreSetupBaseCacheKey",
@@ -1836,7 +1836,7 @@ void BlockBasedTableBuilder::WritePropertiesBlock(
     rep_->props.index_key_is_user_key =
         !rep_->index_builder->seperator_is_key_plus_seq();
     rep_->props.index_value_is_delta_encoded =
-        rep_->use_delta_encoding_for_index_values;
+        rep_->use_delta_encoding_for_index_values;  // 442行
     if (rep_->sampled_input_data_bytes > 0) {
       rep_->props.slow_compression_estimated_data_size = static_cast<uint64_t>(
           static_cast<double>(rep_->sampled_output_slow_data_bytes) /

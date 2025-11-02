@@ -30,11 +30,11 @@ namespace {
 class BytewiseComparatorImpl : public Comparator {
  public:
   BytewiseComparatorImpl() { }
-  static const char* kClassName() { return "leveldb.BytewiseComparator"; }
+  static const char* kClassName() { return "leveldb.BytewiseComparator"; }  // 没有override
   const char* Name() const override { return kClassName(); }
 
   int Compare(const Slice& a, const Slice& b) const override {
-    return a.compare(b);
+    return a.compare(b);  // 调用Slice的compare方法
   }
 
   bool Equal(const Slice& a, const Slice& b) const override { return a == b; }
@@ -52,7 +52,7 @@ class BytewiseComparatorImpl : public Comparator {
     if (diff_index >= min_length) {
       // Do not shorten if one string is a prefix of the other
     } else {
-      uint8_t start_byte = static_cast<uint8_t>((*start)[diff_index]);
+      uint8_t start_byte = static_cast<uint8_t>((*start)[diff_index]);  // 转成unsigned char
       uint8_t limit_byte = static_cast<uint8_t>(limit[diff_index]);
       if (start_byte >= limit_byte) {
         // Cannot shorten since limit is smaller than start or start is
@@ -62,8 +62,8 @@ class BytewiseComparatorImpl : public Comparator {
       assert(start_byte < limit_byte);
 
       if (diff_index < limit.size() - 1 || start_byte + 1 < limit_byte) {
-        (*start)[diff_index]++;
-        start->resize(diff_index + 1);
+        (*start)[diff_index]++; // 简单把字符增大1
+        start->resize(diff_index + 1);  // 截断
       } else {
         //     v
         // A A 1 A A A
@@ -79,7 +79,7 @@ class BytewiseComparatorImpl : public Comparator {
           // increment it
           if (static_cast<uint8_t>((*start)[diff_index]) <
               static_cast<uint8_t>(0xff)) {
-            (*start)[diff_index]++;
+            (*start)[diff_index]++; // A A 1 B
             start->resize(diff_index + 1);
             break;
           }
@@ -97,8 +97,8 @@ class BytewiseComparatorImpl : public Comparator {
       const uint8_t byte = (*key)[i];
       if (byte != static_cast<uint8_t>(0xff)) {
         (*key)[i] = byte + 1;
-        key->resize(i+1);
-        return;
+        key->resize(i+1); // 简单截断
+        return; // 退出
       }
     }
     // *key is a run of 0xffs.  Leave it alone.

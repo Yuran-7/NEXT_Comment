@@ -274,6 +274,10 @@ class CompactionOutputs {
   std::unique_ptr<TableBuilder> builder_;
   std::unique_ptr<WritableFileWriter> file_writer_;
   uint64_t current_output_file_size_ = 0;
+  // Remember whether the builder was created with global secondary index
+  // enabled. This is set in NewBuilder() from TableBuilderOptions so that
+  // Finish() can decide whether to extract secondary index entries.
+  bool builder_global_sec_index_ = false;
 
   // all the compaction outputs so far
   std::vector<Output> outputs_;

@@ -1957,7 +1957,11 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
     } else {
       ValueRange query_valrange = ReadValueRange(query_slice);
       Rect1D query_rect1D(query_valrange.range.min, query_valrange.range.max);
+      auto start = std::chrono::high_resolution_clock::now();
       hittedFiles = global_rtree_->Search(query_rect1D.min, query_rect1D.max, GlobalRTreeCallback); // 返回值很关键，global_rtree_是新增的VersionSet成员变量，在VersionSet的构造函数中初始化：global_rtree_.Load(global_rtree_loc_);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+      std::cout << "R-tree search time (microseconds): " << duration << std::endl;
     }
 
     // iterating through the return vector
@@ -6232,7 +6236,7 @@ Status VersionSet::Recover(
                                const_cast<VersionSet*>(this),
                                /*track_missing_files=*/false,
                                /*no_error_if_files_missing=*/false, io_tracer_);
-    handler.Iterate(reader, &log_read_status);  // 和下面的VersionSet::CreateColumnFamily()关联起来
+    handler.Iterate(reader, &log_read_status);  // 读取每个 VersionEdit 记录，重建列族（CreateColumnFamily），和下面的VersionSet::CreateColumnFamily()关联起来，还和LoadTable相关，以及db/version_builder.cc1763行
     s = handler.status();
     if (s.ok()) {
       log_number = handler.GetVersionEditParams().log_number_;

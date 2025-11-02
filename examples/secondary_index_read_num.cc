@@ -137,8 +137,8 @@ int main(int argc, char* argv[]) {
     BlockBasedTableOptions block_based_options;
 
     // For per file secondary index in SST file
-    block_based_options.create_secondary_index = true;
-    block_based_options.create_sec_index_reader = true;
+    block_based_options.create_secondary_index = true;  // builder.cc
+    block_based_options.create_sec_index_reader = true; // reader.cc
     block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec;
     
     // For global secondary index in memory
@@ -148,13 +148,17 @@ int main(int argc, char* argv[]) {
     // Set the block cache to 64 MB
     block_based_options.block_cache = rocksdb::NewLRUCache(64 * 1024 * 1024);
 
-    options.table_factory.reset(NewBlockBasedTableFactory(block_based_options));
+    options.table_factory.reset(NewBlockBasedTableFactory(block_based_options));  // table_factory只有一个成员变量需要初始化，就是BlockBasedTableOptions，在db\table_cache.cc165行，在db\builder.cc54行
     options.memtable_factory.reset(new rocksdb::SkipListSecFactory);
 
-    options.force_consistency_checks = false;
+    options.force_consistency_checks = false;   // 在打开数据库（DB::Open()）或恢复时，会做一些“自检”来确保数据库文件结构、Manifest、SST 文件等之间的一致性,安全但会增加打开时间
 
     Status s;
+    auto start = std::chrono::high_resolution_clock::now();
     s = DB::Open(options, kDBPath, &db);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    std::cout << "DB Open Duration: " << duration.count() / 1'000'000'000.0 << " seconds" << std::endl;
     std::cout << "Open DB status: " << s.ToString() << std::endl;
 
     uint32_t id;
@@ -183,16 +187,16 @@ int main(int argc, char* argv[]) {
         // std::cout << "created New iterator" << std::endl;
         int counter = 0;
         for (it->SeekToFirst(); it->Valid(); it->Next()) {
-            // 打印第一个查询的所有key，检查是否大致升序；已知key为4字节int
-            if (i == 0) {
-                const Slice key_slice = it->key();
-                if (key_slice.size() >= sizeof(int)) {
-                    int key_int = *reinterpret_cast<const int*>(key_slice.data());
-                    std::cout << key_int << "\n";
-                } else {
-                    std::cout << "<invalid key size:" << key_slice.size() << ">\n";
-                }
-            }
+            // // 打印第一个查询的所有key，检查是否大致升序；已知key为4字节int
+            // if (i == 0) {
+            //     const Slice key_slice = it->key();
+            //     if (key_slice.size() >= sizeof(int)) {
+            //         int key_int = *reinterpret_cast<const int*>(key_slice.data());
+            //         std::cout << key_int << "\n";
+            //     } else {
+            //         std::cout << "<invalid key size:" << key_slice.size() << ">\n";
+            //     }
+            // }
 
             double value = deserialize_val(it->value());    // it->value()是返回所有值，deserialize_val将第一个double类型的面积取出来
             // std::cout << value << std::endl;
@@ -202,14 +206,13 @@ int main(int argc, char* argv[]) {
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         totalDuration = totalDuration + duration;
         // resFile << "Results: \t" << counter << "\t" << totalDuration.count() << "\n";
-        std::cout << "search " << i + 1 << " number of results: " << counter << std::endl;
+        // std::cout << "search " << i + 1 << " number of results: " << counter << std::endl;
         // std::cout << "Query Duration: " << duration.count() << " nanoseconds" << std::endl;   
         totalResults += counter;
     }
     std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
     std::cout << "Total number of results: " << totalResults << std::endl;
 
-    sleep(5);
     db->Close();    
 
     delete db;
@@ -235,4 +238,22 @@ g++ -g3 -O0 -std=c++17 \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
 
- // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.01
+ /*
+ g++ -O3 -std=c++17 \
+  -faligned-new -DHAVE_ALIGNED_NEW \
+  -DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX \
+  -DOS_LINUX -fno-builtin-memcmp \
+  -DROCKSDB_FALLOCATE_PRESENT -DSNAPPY -DGFLAGS=1 \
+  -DZLIB -DBZIP2 -DLZ4 -DZSTD -DNUMA -DTBB \
+  -DROCKSDB_MALLOC_USABLE_SIZE -DROCKSDB_PTHREAD_ADAPTIVE_MUTEX \
+  -DROCKSDB_BACKTRACE -DROCKSDB_RANGESYNC_PRESENT \
+  -DROCKSDB_SCHED_GETCPU_PRESENT -DROCKSDB_AUXV_GETAUXVAL_PRESENT \
+  -march=native -DHAVE_SSE42 -DHAVE_PCLMUL -DHAVE_AVX2 \
+  -DHAVE_BMI -DHAVE_LZCNT -DHAVE_UINT128_EXTENSION \
+  -fno-rtti secondary_index_read_num.cc \
+  -o secondary_index_read_num ../librocksdb.a \
+  -I../include -I.. \
+  -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
+ */
+
+ // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.1

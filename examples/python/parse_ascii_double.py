@@ -31,3 +31,4 @@ if __name__ == "__main__":
         print("用法: python parse_double.py '\\330J\\350.\\211{+@'")
     else:
         parse_ascii_to_double(sys.argv[1])
+# python python/parse_ascii_double.py '\351\327\326O\377\331\377?'

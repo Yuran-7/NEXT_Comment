@@ -66,7 +66,7 @@ void VersionEditHandlerBase::Iterate(log::Reader& reader,
     s = *log_read_status;
   }
 
-  CheckIterationResult(reader, &s);
+  CheckIterationResult(reader, &s); // 调用LoadTables，362行
 
   if (!s.ok()) {
     if (s.IsCorruption()) {
@@ -423,7 +423,7 @@ void VersionEditHandler::CheckIterationResult(const log::Reader& reader,
         cfd->table_cache()->SetTablesAreImmortal();
       }
       *s = LoadTables(cfd, /*prefetch_index_and_filter_in_cache=*/false,
-                      /*is_initial_load=*/true);
+                      /*is_initial_load=*/true);  // 对每一个列簇去构建表缓存
       if (!s->ok()) {
         // If s is IOError::PathNotFound, then we mark the db as corrupted.
         if (s->IsPathNotFound()) {
@@ -562,12 +562,19 @@ Status VersionEditHandler::LoadTables(ColumnFamilyData* cfd,
   assert(builder_iter->second != nullptr);
   VersionBuilder* builder = builder_iter->second->version_builder();
   assert(builder);
+  auto start = std::chrono::steady_clock::now();
   Status s = builder->LoadTableHandlers(
       cfd->internal_stats(),
       version_set_->db_options_->max_file_opening_threads,
       prefetch_index_and_filter_in_cache, is_initial_load,
       cfd->GetLatestMutableCFOptions()->prefix_extractor,
       MaxFileSizeForL0MetaPin(*cfd->GetLatestMutableCFOptions()));
+  auto end = std::chrono::steady_clock::now();
+  ROCKS_LOG_INFO(
+      version_set_->db_options_->info_log,
+      "LoadTables函数耗时 %.3f seconds",
+      std::chrono::duration_cast<std::chrono::duration<double>>(end - start)
+          .count());
   if ((s.IsPathNotFound() || s.IsCorruption()) && no_error_if_files_missing_) {
     s = Status::OK();
   }

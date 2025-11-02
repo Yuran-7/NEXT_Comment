@@ -57,7 +57,7 @@ Status BlockBasedTable::IndexReaderCommon::ReadSecIndexBlock(
       prefetch_buffer, read_options, secondary_index_handle,
       UncompressionDict::GetEmptyDict(), index_block, BlockType::kIndex,
       get_context, lookup_context, /* for_compaction */ false, use_cache,
-      /* wait_for_cache */ true, /* async_read */ false);
+      /* wait_for_cache */ true, /* async_read */ false); // 这行代码的核心作用是根据 secondary_index_handle 提供的地址，从 SST 文件中读取并解压二级索引块，然后将其内容存入 index_block 中，并根据 use_cache 的设置决定是否将其缓存起来以备后续使用
 
   return s;
 }

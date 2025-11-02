@@ -136,10 +136,10 @@ class WritableFileWriter {
                                         char* buf);
 
   std::string file_name_;
-  FSWritableFilePtr writable_file_;
+  FSWritableFilePtr writable_file_; // PosixWritableFile位于env/io_posix.h
   SystemClock* clock_;
   AlignedBuffer buf_;
-  size_t max_buffer_size_;
+  size_t max_buffer_size_;  // 默认是1MB
   // Actually written data size can be used for truncate
   // not counting padding data
   std::atomic<uint64_t> filesize_;

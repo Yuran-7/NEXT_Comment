@@ -168,182 +168,151 @@ class GlobalSecRobinHood {
     index_.clear();
   }
 
-  // 持久化支持（简化版）
-  bool Save(const char* path) const {
-    FILE* f = std::fopen(path, "wb");
-    if (!f) return false;
+  // 持久化辅助类（参考 RTree 的 RTFileStream 设计，仅支持 Linux）
+  class HashFileStream {
+    FILE* file_;
+   public:
+    HashFileStream() : file_(nullptr) {}
+    ~HashFileStream() { Close(); }
 
-    // 使用较大的用户缓冲区提升顺序 I/O 吞吐
-    constexpr size_t kBufSize = 4 * 1024 * 1024; // 4 MiB
-    char* io_buf = static_cast<char*>(std::malloc(kBufSize));
-    if (io_buf) {
-      setvbuf(f, io_buf, _IOFBF, kBufSize);
+    bool OpenWrite(const char* path) {
+      file_ = std::fopen(path, "wb");
+      return file_ != nullptr;
     }
 
-    // 头部：魔数、版本、key 数量、类型大小（从 v2 开始写入）
-    const uint32_t magic = ('R'<<0)|('H'<<8)|('M'<<16)|('P'<<24); // "RHMP"
-    const uint32_t version = 2; // v2: 追加类型大小信息
-    const uint64_t key_count = static_cast<uint64_t>(index_.size());
-    const uint32_t key_size = static_cast<uint32_t>(sizeof(Key));
-    const uint32_t handle_size = static_cast<uint32_t>(sizeof(BlockHandle));
+    bool OpenRead(const char* path) {
+      file_ = std::fopen(path, "rb");
+      return file_ != nullptr;
+    }
 
-    auto wr = [&](const void* p, size_t n) {
-      return std::fwrite(p, 1, n, f) == n;
-    };
+    void Close() {
+      if (file_) {
+        std::fclose(file_);
+        file_ = nullptr;
+      }
+    }
 
-    if (!wr(&magic, sizeof(magic)) ||
-        !wr(&version, sizeof(version)) ||
-        !wr(&key_count, sizeof(key_count)) ||
-        !wr(&key_size, sizeof(key_size)) ||
-        !wr(&handle_size, sizeof(handle_size))) {
-      std::fclose(f);
-      if (io_buf) std::free(io_buf);
+    template <typename T>
+    size_t Write(const T& val) {
+      return std::fwrite(&val, sizeof(T), 1, file_);
+    }
+
+    template <typename T>
+    size_t WriteArray(const T* arr, size_t count) {
+      return std::fwrite(arr, sizeof(T), count, file_);
+    }
+
+    template <typename T>
+    size_t Read(T& val) {
+      return std::fread(&val, sizeof(T), 1, file_);
+    }
+
+    template <typename T>
+    size_t ReadArray(T* arr, size_t count) {
+      return std::fread(arr, sizeof(T), count, file_);
+    }
+  };
+
+  // 持久化到文件（参考 RTree::Save 的简洁风格）
+  bool Save(const char* path) const {
+    HashFileStream stream;
+    if (!stream.OpenWrite(path)) {
       return false;
     }
-
-    // 写每个 key 的数据：key, file_count, [filenum, handle_count, handles...]*
-    for (const auto& kv : index_) {
-      const Key& key = kv.first;
-      const auto& inner_map = kv.second;
-      const uint32_t file_count = static_cast<uint32_t>(inner_map.size());
-
-      if (!wr(&key, sizeof(Key)) || !wr(&file_count, sizeof(file_count))) {
-        std::fclose(f);
-        if (io_buf) std::free(io_buf);
-        return false;
-      }
-
-      for (const auto& file_kv : inner_map) {
-        int filenum = file_kv.first;
-        const auto& handles = file_kv.second;
-        const uint32_t handle_count = static_cast<uint32_t>(handles.size());
-
-        if (!wr(&filenum, sizeof(filenum)) ||
-            !wr(&handle_count, sizeof(handle_count))) {
-          std::fclose(f);
-          if (io_buf) std::free(io_buf);
-          return false;
-        }
-
-        if (handle_count) {
-          // 批量写出连续存储的 BlockHandle 数组
-          if (!wr(handles.data(), sizeof(BlockHandle) * handle_count)) {
-            std::fclose(f);
-            if (io_buf) std::free(io_buf);
-            return false;
-          }
+    
+    // 写入头部信息（魔数 + 版本 + key数量）
+    int magic = ('R'<<0)|('H'<<8)|('M'<<16)|('P'<<24); // "RHMP"
+    int version = 1;
+    int key_count = static_cast<int>(index_.size());
+    
+    stream.Write(magic);
+    stream.Write(version);
+    stream.Write(key_count);
+    
+    // 逐个写入每个 key 的数据
+    for (const auto& outer_kv : index_) {
+      // 写入 key
+      stream.Write(outer_kv.first);
+      
+      // 写入该 key 下的 file 数量
+      const auto& inner_map = outer_kv.second;
+      int file_count = static_cast<int>(inner_map.size());
+      stream.Write(file_count);
+      
+      // 写入每个 filenum 及其 handles
+      for (const auto& inner_kv : inner_map) {
+        stream.Write(inner_kv.first); // filenum
+        
+        const auto& handles = inner_kv.second;
+        int handle_count = static_cast<int>(handles.size());
+        stream.Write(handle_count);
+        
+        // 批量写入 handles（连续内存，高效）
+        if (handle_count > 0) {
+          stream.WriteArray(handles.data(), handle_count);
         }
       }
     }
-
-    std::fclose(f);
-    if (io_buf) std::free(io_buf);
+    
+    stream.Close();
     return true;
   }
 
+  // 从文件加载（参考 RTree::Load 的简洁风格）
   bool Load(const char* path) {
-    FILE* f = std::fopen(path, "rb");
-    if (!f) return false;
-
-    // 使用较大的用户缓冲区提升顺序 I/O 吞吐
-    constexpr size_t kBufSize = 4 * 1024 * 1024; // 4 MiB
-    char* io_buf = static_cast<char*>(std::malloc(kBufSize));
-    if (io_buf) {
-      setvbuf(f, io_buf, _IOFBF, kBufSize);
-    }
-
-    auto rd = [&](void* p, size_t n) { return std::fread(p, 1, n, f) == n; };
-
-    // 读头部（兼容 v1 与 v2）
-    uint32_t magic = 0, version = 0;
-    uint64_t key_count = 0;
-    uint32_t key_size = 0, handle_size = 0;
-
-    if (!rd(&magic, sizeof(magic)) || !rd(&version, sizeof(version))) {
-      std::fclose(f);
-      if (io_buf) std::free(io_buf);
+    HashFileStream stream;
+    if (!stream.OpenRead(path)) {
       return false;
     }
-
-    const uint32_t expected_magic = ('R'<<0)|('H'<<8)|('M'<<16)|('P'<<24);
+    
+    // 读取并验证头部
+    int magic = 0, version = 0, key_count = 0;
+    
+    stream.Read(magic);
+    stream.Read(version);
+    stream.Read(key_count);
+    
+    // 验证魔数
+    int expected_magic = ('R'<<0)|('H'<<8)|('M'<<16)|('P'<<24);
     if (magic != expected_magic) {
-      std::fclose(f);
-      if (io_buf) std::free(io_buf);
+      stream.Close();
       return false;
     }
-
-    if (version == 1) {
-      if (!rd(&key_count, sizeof(key_count))) {
-        std::fclose(f);
-        if (io_buf) std::free(io_buf);
-        return false;
-      }
-    } else if (version >= 2) {
-      if (!rd(&key_count, sizeof(key_count)) ||
-          !rd(&key_size, sizeof(key_size)) ||
-          !rd(&handle_size, sizeof(handle_size))) {
-        std::fclose(f);
-        if (io_buf) std::free(io_buf);
-        return false;
-      }
-      // 基本类型大小校验
-      if (key_size != sizeof(Key) || handle_size != sizeof(BlockHandle)) {
-        std::fclose(f);
-        if (io_buf) std::free(io_buf);
-        return false;
-      }
-    } else {
-      std::fclose(f);
-      if (io_buf) std::free(io_buf);
-      return false;
-    }
-
+    
+    // 清空现有数据并预留空间
     Clear();
-    // 提前为外层哈希表保留空间，减少 rehash 开销
-    index_.reserve(static_cast<size_t>(key_count));
-
-    // 读每个 key 的数据
-    for (uint64_t i = 0; i < key_count; ++i) {
-      Key key{};
-      uint32_t file_count = 0;
-
-      if (!rd(&key, sizeof(Key)) || !rd(&file_count, sizeof(file_count))) {
-        std::fclose(f);
-        if (io_buf) std::free(io_buf);
-        Clear();
-        return false;
-      }
-
+    index_.reserve(key_count);
+    
+    // 逐个读取每个 key 的数据
+    for (int i = 0; i < key_count; ++i) {
+      Key key;
+      int file_count = 0;
+      
+      stream.Read(key);
+      stream.Read(file_count);
+      
       auto& inner_map = index_[key];
       inner_map.reserve(file_count);
-
-      for (uint32_t j = 0; j < file_count; ++j) {
+      
+      // 读取每个 filenum 及其 handles
+      for (int j = 0; j < file_count; ++j) {
         int filenum = 0;
-        uint32_t handle_count = 0;
-
-        if (!rd(&filenum, sizeof(filenum)) || !rd(&handle_count, sizeof(handle_count))) {
-          std::fclose(f);
-          if (io_buf) std::free(io_buf);
-          Clear();
-          return false;
+        int handle_count = 0;
+        
+        stream.Read(filenum);
+        stream.Read(handle_count);
+        
+        // 批量读取 handles（连续内存，高效）
+        std::vector<BlockHandle> handles(handle_count);
+        if (handle_count > 0) {
+          stream.ReadArray(handles.data(), handle_count);
         }
-
-        std::vector<BlockHandle> handles;
-        if (handle_count) {
-          handles.resize(handle_count);
-          if (!rd(handles.data(), sizeof(BlockHandle) * handle_count)) {
-            std::fclose(f);
-            if (io_buf) std::free(io_buf);
-            Clear();
-            return false;
-          }
-        }
-        inner_map.emplace(filenum, std::move(handles));
+        
+        inner_map[filenum] = std::move(handles);
       }
     }
-
-    std::fclose(f);
-    if (io_buf) std::free(io_buf);
+    
+    stream.Close();
     return true;
   }
 

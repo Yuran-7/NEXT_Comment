@@ -64,7 +64,7 @@ BlockBuilder::BlockBuilder(
       assert(0);
   }
   assert(block_restart_interval_ >= 1);
-  estimate_ = sizeof(uint32_t) + sizeof(uint32_t);
+  estimate_ = sizeof(uint32_t) + sizeof(uint32_t);  // estimate_初始值为8
 }
 
 void BlockBuilder::Reset() {
@@ -119,7 +119,7 @@ size_t BlockBuilder::EstimateSizeAfterKV(const Slice& key,
 Slice BlockBuilder::Finish() {  // 这个函数完全一致，没有变动
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
-    PutFixed32(&buffer_, restarts_[i]);
+    PutFixed32(&buffer_, restarts_[i]); // 写入restart数组
   }
 
   uint32_t num_restarts = static_cast<uint32_t>(restarts_.size());
@@ -188,15 +188,15 @@ inline void BlockBuilder::AddWithLastKeyImpl(const Slice& key,
   size_t shared = 0;  // number of bytes shared with prev key
   if (counter_ >= block_restart_interval_) {
     // Restart compression
-    restarts_.push_back(static_cast<uint32_t>(buffer_size));
-    estimate_ += sizeof(uint32_t);
+    restarts_.push_back(static_cast<uint32_t>(buffer_size)); // 24、48、72... 28 * 18 + 4 = 508 
+    estimate_ += sizeof(uint32_t);  // 每次进入都会加4字节
     counter_ = 0;
   } else if (use_delta_encoding_) {
     // See how much sharing to do with previous string
     shared = key.difference_offset(last_key);
   }
 
-  const size_t non_shared = key.size() - shared;
+  const size_t non_shared = key.size() - shared;  // 当block_restart_interval_为1时，shared永远是0
 
   if (use_value_delta_encoding_) {
     // Add "<shared><non_shared>" to buffer_
@@ -226,7 +226,7 @@ inline void BlockBuilder::AddWithLastKeyImpl(const Slice& key,
   }
 
   counter_++;
-  estimate_ += buffer_.size() - buffer_size;
+  estimate_ += buffer_.size() - buffer_size;  // estimate初始值是8，+24后为32
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -636,7 +636,7 @@ TableBuilder* BlockBasedTableFactory::NewTableBuilder(
     const TableBuilderOptions& table_builder_options,
     WritableFileWriter* file) const {
   return new BlockBasedTableBuilder(table_options_, table_builder_options,
-                                    file);
+                                    file);  // table/block_based/block_based_table_builder.cc，893行
 }
 
 Status BlockBasedTableFactory::ValidateOptions(

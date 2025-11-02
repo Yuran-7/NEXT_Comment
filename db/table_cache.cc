@@ -124,12 +124,12 @@ Status TableCache::GetTableReader(
     size_t max_file_size_for_l0_meta_pin, Temperature file_temperature) {
   std::string fname = TableFileName(
       ioptions_.cf_paths, file_meta.fd.GetNumber(), file_meta.fd.GetPathId());
-  std::unique_ptr<FSRandomAccessFile> file;
+  std::unique_ptr<FSRandomAccessFile> file; // 纯粹的底层I/O接口，专注于基本的文件打开、关闭、读写和定位操作。没有额外的应用层逻辑
   FileOptions fopts = file_options;
   fopts.temperature = file_temperature;
   Status s = PrepareIOFromReadOptions(ro, ioptions_.clock, fopts.io_options);
   if (s.ok()) {
-    s = ioptions_.fs->NewRandomAccessFile(fname, fopts, &file, nullptr);
+    s = ioptions_.fs->NewRandomAccessFile(fname, fopts, &file, nullptr);  // 打开物理文件，获取文件句柄file，操作系统级别的open系统调用
   }
   if (s.ok()) {
     RecordTick(ioptions_.stats, NO_FILE_OPENS);
@@ -147,7 +147,7 @@ Status TableCache::GetTableReader(
 
   if (s.ok()) {
     if (!sequential_mode && ioptions_.advise_random_on_open) {
-      file->Hint(FSRandomAccessFile::kRandom);
+      file->Hint(FSRandomAccessFile::kRandom);  // 进入，向文件系统或底层I/O层提供一个访问模式提示，告诉它接下来的文件访问将是随机访问
     }
     StopWatch sw(ioptions_.clock, ioptions_.stats, TABLE_OPEN_IO_MICROS);
     std::unique_ptr<RandomAccessFileReader> file_reader(
@@ -155,7 +155,7 @@ Status TableCache::GetTableReader(
             std::move(file), fname, ioptions_.clock, io_tracer_,
             record_read_stats ? ioptions_.stats : nullptr, SST_READ_MICROS,
             file_read_hist, ioptions_.rate_limiter.get(), ioptions_.listeners,
-            file_temperature, level == ioptions_.num_levels - 1));
+            file_temperature, level == ioptions_.num_levels - 1));  // 基础上添加了应用层的功能，如I/O统计（ioptions_.stats）、性能监控（ioptions_.clock）、I/O追踪（io_tracer_）、速率限制（ioptions_.rate_limiter）、事件监听（ioptions_.listeners）等
     UniqueId64x2 expected_unique_id;
     if (ioptions_.verify_sst_unique_id_in_manifest) {
       expected_unique_id = file_meta.unique_id;
@@ -171,7 +171,7 @@ Status TableCache::GetTableReader(
                            db_session_id_, file_meta.fd.GetNumber(),
                            expected_unique_id, file_meta.fd.largest_seqno),
         std::move(file_reader), file_meta.fd.GetFileSize(), table_reader,
-        prefetch_index_and_filter_in_cache);
+        prefetch_index_and_filter_in_cache);  // prefetch_index_and_filter_in_cache为false
     TEST_SYNC_POINT("TableCache::GetTableReader:0");
   }
   return s;
@@ -257,7 +257,7 @@ InternalIterator* TableCache::NewIterator(
   bool for_compaction = caller == TableReaderCaller::kCompaction; //false
   auto& fd = file_meta.fd;  // FileMetaData内的FileDescriptor
   table_reader = fd.table_reader; // BlockBaseTable类从FileDescriptor内获取
-  if (table_reader == nullptr) {  // 不走这个if，但不一定不走这个
+  if (table_reader == nullptr) {  // 不走这个if，在Open的时候，已经存入file_meta中，db/version_builder.cc1831行
     s = FindTable(
         options, file_options, icomparator, file_meta, &handle,
         prefix_extractor, options.read_tier == kBlockCacheTier /* no_io */,
