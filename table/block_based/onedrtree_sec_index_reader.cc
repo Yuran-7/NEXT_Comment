@@ -36,8 +36,8 @@ Status OneDRtreeSecIndexReader::Create(
 
     const Status s = 
           ReadSecIndexBlock(table, prefetch_buffer, ro, use_cache,
-                          /*get_context=*/nullptr, lookup_context, &index_block,
-                          meta_index_iter); // table/block_based/index_reader_common.cc 37行
+                          /*get_context=*/nullptr, lookup_context, &index_block,  // 只有60B， 24 + 24 + 12，2个重启点，两个范围是0~65.805212，65.8055~7324.78715
+                          meta_index_iter); // table/block_based/index_reader_common.cc 37行，把读到的数据存入index_block，调试*(unsigned char (*)[60])index_block->value_.data_
     
 
     if (!s.ok()) {
@@ -49,7 +49,7 @@ Status OneDRtreeSecIndexReader::Create(
     }
   }
 
-  index_reader->reset(new OneDRtreeSecIndexReader(table, std::move(index_block)));  // : IndexReaderCommon(t, std::move(index_block))，最终把index_block的内容传到IndexReaderCommon的成员变量index_block_
+  index_reader->reset(new OneDRtreeSecIndexReader(table, std::move(index_block)));  // class OneDRtreeSecIndexReader : IndexReaderCommon(t, std::move(index_block))，最终把index_block的内容传到IndexReaderCommon的成员变量index_block_
 
   // std::cout << "get rtree index meta block" << std::endl;
 
@@ -82,7 +82,7 @@ Status OneDRtreeSecIndexReader::Create(
       &meta_contents, ioptions, true /*decompress*/,
       true /*maybe_compressed*/, BlockType::kRtreeIndexMetadata,
       UncompressionDict::GetEmptyDict(), cache_options, memory_allocator);
-  s = meta_block_fetcher.ReadBlockContents();
+  s = meta_block_fetcher.ReadBlockContents(); // 执行完，meta_contents是\005，大小是1
   if (!s.ok()) {
     return s;
   }
@@ -93,7 +93,7 @@ Status OneDRtreeSecIndexReader::Create(
 
   uint32_t rtree_height = 0;
 
-  if (!GetVarint32(&meta_data, &rtree_height)) {
+  if (!GetVarint32(&meta_data, &rtree_height)) {  // 感觉上面一大段只是为了获取rtree_height为5
     s = Status::Corruption(
         "Corrupted prefix meta block: unable to read from it.");
   }

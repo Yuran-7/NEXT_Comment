@@ -98,7 +98,7 @@ class ArenaWrappedDBIter : public Iterator {
   }
 
  private:
-  DBIter* db_iter_ = nullptr;
+  DBIter* db_iter_ = nullptr; // DBIter类型的成员变量，最重要的目的就是初始化它
   Arena arena_;
   uint64_t sv_number_;
   ColumnFamilyData* cfd_ = nullptr;

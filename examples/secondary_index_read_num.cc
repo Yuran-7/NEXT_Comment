@@ -144,6 +144,7 @@ int main(int argc, char* argv[]) {
     // For global secondary index in memory
     options.create_global_sec_index = true; // to activate the global sec index
     options.global_sec_index_is_spatial = false;
+    options.global_sec_index_is_hash = true;
 
     // Set the block cache to 64 MB
     block_based_options.block_cache = rocksdb::NewLRUCache(64 * 1024 * 1024);
@@ -155,7 +156,7 @@ int main(int argc, char* argv[]) {
 
     Status s;
     auto start = std::chrono::high_resolution_clock::now();
-    s = DB::Open(options, kDBPath, &db);
+    s = DB::Open(options, kDBPath, &db);  // 调试*(rocksdb::DBImpl*)db
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
     std::cout << "DB Open Duration: " << duration.count() / 1'000'000'000.0 << " seconds" << std::endl;
@@ -256,4 +257,4 @@ g++ -g3 -O0 -std=c++17 \
   -lpthread -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lnuma -ltbb -luring
  */
 
- // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.1
+ // ./secondary_index_read_num /NV1/ysh/NEXT/examples/testdb 1000 /NV1/ysh/dataset/buildings_1m/buildings_1D_query_0.01

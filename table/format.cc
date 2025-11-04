@@ -361,7 +361,7 @@ Status ReadFooterFromFile(const IOOptions& opts, RandomAccessFileReader* file,
   std::string footer_buf;
   AlignedBuf internal_buf;
   Slice footer_input;
-  uint64_t read_offset = (file_size > Footer::kMaxEncodedLength)
+  uint64_t read_offset = (file_size > Footer::kMaxEncodedLength)  // 53
                              ? file_size - Footer::kMaxEncodedLength
                              : 0;
   Status s;
@@ -379,11 +379,11 @@ Status ReadFooterFromFile(const IOOptions& opts, RandomAccessFileReader* file,
       s = file->Read(opts, read_offset, Footer::kMaxEncodedLength,
                      &footer_input, nullptr, &internal_buf,
                      opts.rate_limiter_priority);
-    } else {
+    } else {  // 进入
       footer_buf.reserve(Footer::kMaxEncodedLength);
       s = file->Read(opts, read_offset, Footer::kMaxEncodedLength,
                      &footer_input, &footer_buf[0], nullptr,
-                     opts.rate_limiter_priority);
+                     opts.rate_limiter_priority); // footer 的读取是直接通过底层 file->Read/pread 走的（命中 OS page cache 的话就直接从 page cache 拷贝）
     }
     if (!s.ok()) return s;
   }

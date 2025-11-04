@@ -135,7 +135,7 @@ using MergerMinIterHeapNoOrder = BinaryHeap<HeapItem*, MinHeapItemComparatorNoOr
 using MergerMaxIterHeap = BinaryHeap<HeapItem*, MaxHeapItemComparator>;
 }  // namespace
 
-class MergingIterator : public InternalIterator {
+class MergingIterator : public InternalIterator { // 迭代器没有在table/merging_iterator.h中定义，而是在源文件中定义的
  public:
   MergingIterator(const InternalKeyComparator* comparator,
                   InternalIterator** children, int n, bool is_arena_mode,
@@ -2438,7 +2438,7 @@ InternalIterator* NewMergingIterator(const InternalKeyComparator* cmp,
 
 MergeIteratorBuilder::MergeIteratorBuilder(
     const InternalKeyComparator* comparator, Arena* a, bool prefix_seek_mode)
-    : first_iter(nullptr), use_merging_iter(false), arena(a) {
+    : first_iter(nullptr), use_merging_iter(false), arena(a) {  // use_merging_iter 初始值为 false
   auto mem = arena->AllocateAligned(sizeof(MergingIterator));
   // auto mem = arena->AllocateAligned(sizeof(MergingIteratorNoOrder));
   merge_iter =
@@ -2503,7 +2503,7 @@ void MergeIteratorBuilder::AddPointAndTombstoneIterator(
           merge_iter->range_tombstone_iters_.size() - 1, tombstone_iter_ptr);
     }
   } else {
-    first_iter = point_iter;
+    first_iter = point_iter;  // 前面构造函数其实已经初始化了merge_iter
   }
 }
 

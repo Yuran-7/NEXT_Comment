@@ -13,6 +13,8 @@
 #include "db/version_edit.h"
 #include "db/version_set.h"
 
+// 直接使用 VersionEditHandler 或其子类：当要读/恢复/转储 manifest（通常 DB 启动/恢复时）——你会创建 handler，调用 Iterate(reader)
+// 直接使用 VersionBuilder：当在内存中需要逐条应用 VersionEdit 并最终生成一个 VersionStorageInfo（例如在 LogAndApply、创建/安装新 Version 的流程中），VersionEditHandler 会间接调用它；作为库也可单独用于单列族的 edits 合并与检查。
 namespace ROCKSDB_NAMESPACE {
 
 struct FileMetaData;

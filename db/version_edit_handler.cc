@@ -560,7 +560,7 @@ Status VersionEditHandler::LoadTables(ColumnFamilyData* cfd,
   auto builder_iter = builders_.find(cfd->GetID());
   assert(builder_iter != builders_.end());
   assert(builder_iter->second != nullptr);
-  VersionBuilder* builder = builder_iter->second->version_builder();
+  VersionBuilder* builder = builder_iter->second->version_builder();  // 获取 VersionBuilder
   assert(builder);
   auto start = std::chrono::steady_clock::now();
   Status s = builder->LoadTableHandlers(
@@ -568,7 +568,7 @@ Status VersionEditHandler::LoadTables(ColumnFamilyData* cfd,
       version_set_->db_options_->max_file_opening_threads,
       prefetch_index_and_filter_in_cache, is_initial_load,
       cfd->GetLatestMutableCFOptions()->prefix_extractor,
-      MaxFileSizeForL0MetaPin(*cfd->GetLatestMutableCFOptions()));
+      MaxFileSizeForL0MetaPin(*cfd->GetLatestMutableCFOptions()));  // 会调用多线程
   auto end = std::chrono::steady_clock::now();
   ROCKS_LOG_INFO(
       version_set_->db_options_->info_log,

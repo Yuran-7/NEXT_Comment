@@ -132,7 +132,7 @@ Status TableCache::GetTableReader(
     s = ioptions_.fs->NewRandomAccessFile(fname, fopts, &file, nullptr);  // 打开物理文件，获取文件句柄file，操作系统级别的open系统调用
   }
   if (s.ok()) {
-    RecordTick(ioptions_.stats, NO_FILE_OPENS);
+    RecordTick(ioptions_.stats, NO_FILE_OPENS); // Statistics* stats; 把 文件打开次数 这个统计计数器加一
   } else if (s.IsPathNotFound()) {
     fname = Rocks2LevelTableFileName(fname);
     s = PrepareIOFromReadOptions(ro, ioptions_.clock, fopts.io_options);
@@ -170,8 +170,8 @@ Status TableCache::GetTableReader(
                            block_cache_tracer_, max_file_size_for_l0_meta_pin,
                            db_session_id_, file_meta.fd.GetNumber(),
                            expected_unique_id, file_meta.fd.largest_seqno),
-        std::move(file_reader), file_meta.fd.GetFileSize(), table_reader,
-        prefetch_index_and_filter_in_cache);  // prefetch_index_and_filter_in_cache为false
+        std::move(file_reader), file_meta.fd.GetFileSize(), table_reader, // 调试请使用(rocksdb::BlockBasedTable*)(*table_reader).get()，(rocksdb::OneDRtreeSecIndexReader*)(((rocksdb::BlockBasedTable*)(*table_reader).get()).rep_.sec_index_reader)
+        prefetch_index_and_filter_in_cache);  // prefetch_index_and_filter_in_cache为false，最早可以追溯到db/version_edit_handler.cc，425行
     TEST_SYNC_POINT("TableCache::GetTableReader:0");
   }
   return s;

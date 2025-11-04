@@ -611,13 +611,13 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   ro.rate_limiter_priority = read_options.rate_limiter_priority;
 
   // prefetch both index and filters, down to all partitions
-  const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0; // prefetch_index_and_filter_in_cache是false
+  const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0; // prefetch_index_and_filter_in_cache是false，控制“何时读”：是否在 打开 TableReader 当下就去发 I/O 把元数据块读出来
   const bool preload_all = !table_options.cache_index_and_filter_blocks;  // true，全部放到table_reader，而不放到缓存中，内存占用高
 
   if (!ioptions.allow_mmap_reads) { // 进入
     s = PrefetchTail(ro, file.get(), file_size, force_direct_prefetch,
                      tail_prefetch_stats, prefetch_all, preload_all,
-                     &prefetch_buffer); // 预读文件尾部，默认预读512KB（如果prefetch_all为true）
+                     &prefetch_buffer); // 预读文件尾部，默认预读512KB（如果prefetch_all为true），应该在内核 page cache
     // Return error in prefetch path to users.
     if (!s.ok()) {
       return s;
@@ -641,7 +641,7 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   s = file->PrepareIOOptions(ro, opts);
   if (s.ok()) {
     s = ReadFooterFromFile(opts, file.get(), prefetch_buffer.get(), file_size,
-                           &footer, kBlockBasedTableMagicNumber);
+                           &footer, kBlockBasedTableMagicNumber); // table/format.cc，349行，需要从page cache中读取
   }
   if (!s.ok()) {
     return s;
@@ -655,7 +655,7 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   BlockCacheLookupContext lookup_context{TableReaderCaller::kPrefetch};
   Rep* rep = new BlockBasedTable::Rep(ioptions, env_options, table_options,
                                       internal_comparator, skip_filters,
-                                      file_size, level, immortal_table);
+                                      file_size, level, immortal_table);  // 新建一个Rep对象
   rep->file = std::move(file);
   rep->footer = footer;
 
@@ -671,11 +671,11 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
 
   // Read metaindex
   std::unique_ptr<BlockBasedTable> new_table(
-      new BlockBasedTable(rep, block_cache_tracer));
+      new BlockBasedTable(rep, block_cache_tracer));  // 新建一个BlockBasedTable对象
   std::unique_ptr<Block> metaindex;
   std::unique_ptr<InternalIterator> metaindex_iter;
   s = new_table->ReadMetaIndexBlock(ro, prefetch_buffer.get(), &metaindex,
-                                    &metaindex_iter);
+                                    &metaindex_iter); // metaindex和metaindex_iter都是内存变量
   if (!s.ok()) {
     return s;
   }
@@ -809,10 +809,10 @@ Status BlockBasedTable::Open( // table/block_based/block_based_table_factory.cc 
   }
 
   if (s.ok()) {
-    *table_reader = std::move(new_table);
+    *table_reader = std::move(new_table); // new_table.get()变为0x0
   }
   return s;
-}
+} // Open
 
 Status BlockBasedTable::PrefetchTail(
     const ReadOptions& ro, RandomAccessFileReader* file, uint64_t file_size,
@@ -1065,7 +1065,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
         }
       }
     }
-  }
+  } // if (rep_->filter_policy)
   // Partition filters cannot be enabled without partition indexes
   assert(rep_->filter_type != Rep::FilterType::kPartitionedFilter ||
          rep_->index_type == BlockBasedTableOptions::kTwoLevelIndexSearch);
@@ -1077,12 +1077,12 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
     return s;
   }
 
-  BlockBasedTableOptions::IndexType index_type = rep_->index_type;
+  BlockBasedTableOptions::IndexType index_type = rep_->index_type;  // KBinarySearch
 
-  const bool use_cache = table_options.cache_index_and_filter_blocks;
+  const bool use_cache = table_options.cache_index_and_filter_blocks; // false
 
   const bool maybe_flushed =
-      level == 0 && file_size <= max_file_size_for_l0_meta_pin;
+      level == 0 && file_size <= max_file_size_for_l0_meta_pin; // max_file_size_for_l0_meta_pin 96MB
   std::function<bool(PinningTier, PinningTier)> is_pinned =
       [maybe_flushed, &is_pinned](PinningTier pinning_tier,
                                   PinningTier fallback_pinning_tier) {
@@ -1109,32 +1109,32 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   const bool pin_top_level_index = is_pinned(
       table_options.metadata_cache_options.top_level_index_pinning,
       table_options.pin_top_level_index_and_filter ? PinningTier::kAll
-                                                   : PinningTier::kNone);
+                                                   : PinningTier::kNone); // true
   const bool pin_partition =
       is_pinned(table_options.metadata_cache_options.partition_pinning,
                 table_options.pin_l0_filter_and_index_blocks_in_cache
                     ? PinningTier::kFlushedAndSimilar
-                    : PinningTier::kNone);
+                    : PinningTier::kNone);  // false
   const bool pin_unpartitioned =
       is_pinned(table_options.metadata_cache_options.unpartitioned_pinning,
                 table_options.pin_l0_filter_and_index_blocks_in_cache
                     ? PinningTier::kFlushedAndSimilar
-                    : PinningTier::kNone);
+                    : PinningTier::kNone);  // false
 
   // pin the first level of index
   const bool pin_index =
       index_type == BlockBasedTableOptions::kTwoLevelIndexSearch
           ? pin_top_level_index
-          : pin_unpartitioned;
+          : pin_unpartitioned;  // false
   // prefetch the first level of index
   // WART: this might be redundant (unnecessary cache hit) if !pin_index,
   // depending on prepopulate_block_cache option
   const bool prefetch_index = prefetch_all || pin_index;
 
-  std::unique_ptr<IndexReader> index_reader;
+  std::unique_ptr<IndexReader> index_reader;  // 调试(rocksdb::BinarySearchIndexReader*)index_reader.get()，BinarySearchIndexReader继承IndexReaderCommon，IndexReaderCommon继承IndexReader
   s = new_table->CreateIndexReader(ro, prefetch_buffer, meta_iter, use_cache,
                                    prefetch_index, pin_index, lookup_context,
-                                   &index_reader);
+                                   &index_reader);  // 2763行
   if (!s.ok()) {
     return s;
   }
@@ -1166,7 +1166,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   // The partitions of partitioned index are always stored in cache. They
   // are hence follow the configuration for pin and prefetch regardless of
   // the value of cache_index_and_filter_blocks
-  if (prefetch_all || pin_partition) {
+  if (prefetch_all || pin_partition) {  // true，false
     s = rep_->index_reader->CacheDependencies(ro, pin_partition);
     if (table_options.create_sec_index_reader) {
       if (!s.ok()) {
@@ -1182,7 +1182,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   }
 
   // pin the first level of filter
-  const bool pin_filter =
+  const bool pin_filter = // false
       rep_->filter_type == Rep::FilterType::kPartitionedFilter
           ? pin_top_level_index
           : pin_unpartitioned;
@@ -1191,7 +1191,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   // depending on prepopulate_block_cache option
   const bool prefetch_filter = prefetch_all || pin_filter;
 
-  if (rep_->filter_policy) {
+  if (rep_->filter_policy) {  // 不进入
     auto filter = new_table->CreateFilterBlockReader(
         ro, prefetch_buffer, use_cache, prefetch_filter, pin_filter,
         lookup_context);
@@ -1208,7 +1208,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
     }
   }
 
-  if (!rep_->compression_dict_handle.IsNull()) {
+  if (!rep_->compression_dict_handle.IsNull()) {  // 不进入
     std::unique_ptr<UncompressionDictReader> uncompression_dict_reader;
     s = UncompressionDictReader::Create(
         this, ro, prefetch_buffer, use_cache, prefetch_all || pin_unpartitioned,
@@ -1289,7 +1289,7 @@ Status BlockBasedTable::ReadMetaIndexBlock(
       UncompressionDict::GetEmptyDict(), rep_->persistent_cache_options,
       0 /* read_amp_bytes_per_bit */, GetMemoryAllocator(rep_->table_options),
       false /* for_compaction */, rep_->blocks_definitely_zstd_compressed,
-      nullptr /* filter_policy */, false /* async_read */);
+      nullptr /* filter_policy */, false /* async_read */); // ReadBlockFromFile 会把该 metaindex block 的完整内容（payload 解压后）读到堆内存，构成 std::unique_ptr<Block> metaindex返回给调用方
 
   if (!s.ok()) {
     ROCKS_LOG_ERROR(rep_->ioptions.logger,
@@ -1953,7 +1953,7 @@ Status BlockBasedTable::RetrieveBlock(
         for_compaction ? READ_BLOCK_COMPACTION_MICROS : READ_BLOCK_GET_MICROS;
     StopWatch sw(rep_->ioptions.clock, rep_->ioptions.stats, histogram);
     s = ReadBlockFromFile(
-        rep_->file.get(), prefetch_buffer, rep_->footer, ro, handle, &block,
+        rep_->file.get(), prefetch_buffer, rep_->footer, ro, handle, &block,  // 根据handle去 rep_->file 对应的 SST 文件里读，最后把这些字节封装成一个 Block 对象
         rep_->ioptions, do_uncompress, maybe_compressed, block_type,
         uncompression_dict, rep_->persistent_cache_options,
         block_type == BlockType::kData
@@ -1982,7 +1982,7 @@ Status BlockBasedTable::RetrieveBlock(
     return s;
   }
 
-  block_entry->SetOwnedValue(block.release());
+  block_entry->SetOwnedValue(block.release());  // 调试*(unsigned char (*)[60])block_entry->value_.data_
 
   assert(s.ok());
   return s;

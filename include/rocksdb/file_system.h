@@ -786,7 +786,7 @@ struct FSReadRequest {
   IOStatus status;
 };
 
-// A file abstraction for randomly reading the contents of a file.
+// 用于随机读取文件（可从任意 offset 读取），设计上支持并发读；主要用于读取表文件、索引等。其实现类PosixRandomAccessFile，位于env/io_posix.h，它包含文件句柄fd_
 class FSRandomAccessFile {
  public:
   FSRandomAccessFile() {}
@@ -929,9 +929,7 @@ struct DataVerificationInfo {
   Slice checksum;
 };
 
-// A file abstraction for sequential writing.  The implementation
-// must provide buffering since callers may append small fragments
-// at a time to the file.
+// 用于“顺序写入/追加或定位写入（PositionedAppend）”文件，主要用于写 WAL / 表文件 / manifest 等，写操作通常不并发（由上层保证外部同步）
 class FSWritableFile {
  public:
   FSWritableFile()

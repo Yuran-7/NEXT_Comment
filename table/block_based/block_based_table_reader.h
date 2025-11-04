@@ -227,7 +227,7 @@ class BlockBasedTable : public TableReader {
     }
   };
 
-  class IndexReaderCommon;
+  class IndexReaderCommon;  // 定义在table/block_based/index_reader_common.h
 
   static void SetupBaseCacheKey(const TableProperties* properties,
                                 const std::string& cur_db_session_id,

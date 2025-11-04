@@ -82,10 +82,10 @@ class MergeIteratorBuilder {
   InternalIterator* Finish(ArenaWrappedDBIter* db_iter = nullptr);
 
  private:
-  MergingIterator* merge_iter;
+  MergingIterator* merge_iter;  // MergingIterator是InternalIterator的子类
 //   MergingIteratorNoOrder* merge_iter;
-  InternalIterator* first_iter;
-  bool use_merging_iter;
+  InternalIterator* first_iter; // 指向的是 普通的某一个内部迭代器，例如某个 level 的文件迭代器、某个 memtable 迭代器
+  bool use_merging_iter;  // 决定是使用merge_iter还是first_iter
   Arena* arena;
   // Used to set LevelIterator.range_tombstone_iter_.
   // See AddRangeTombstoneIterator() implementation for more detail.

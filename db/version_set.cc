@@ -1912,8 +1912,8 @@ void Version::AddIterators(const ReadOptions& read_options,
                            bool allow_unprepared_value) {
   assert(storage_info_.finalized_);
 
-  if(mutable_cf_options_.create_global_sec_index){
-    int level = 0;
+  if(mutable_cf_options_.create_global_sec_index) {
+    int level = 0;  // 全部认为是level 0，感觉有可以优化的地方
     AddIteratorsForLevel(read_options,soptions,merge_iter_builder,level, allow_unprepared_value);
   } else {
     for (int level = 0; level < storage_info_.num_non_empty_levels(); level++) {

@@ -1805,10 +1805,10 @@ InternalIterator* DBImpl::NewInternalIterator(
   //     &cfd->internal_comparator(), arena,
   //     !read_options.total_order_seek &&
   //         super_version->mutable_cf_options.prefix_extractor != nullptr);
-  MergeIteratorBuilder merge_iter_builder(
+  MergeIteratorBuilder merge_iter_builder(  // table/merging_iterator.cc，2439行
       &cfd->internal_sec_comparator(), arena, // 这个比较器等于不比较
       !read_options.total_order_seek &&
-          super_version->mutable_cf_options.prefix_extractor != nullptr); // 在arena上创建MergingIterator，MergingIterator是MergeIteratorBuilder的成员变量
+          super_version->mutable_cf_options.prefix_extractor != nullptr); // 这个构造函数的作用是在arena上创建MergingIterator，其中MergingIterator是MergeIteratorBuilder的成员变量
   // Collect iterator for mutable memtable
   auto mem_iter = super_version->mem->NewIterator(read_options, arena); // db/memtable.cc 558
   Status s;
@@ -1825,7 +1825,7 @@ InternalIterator* DBImpl::NewInternalIterator(
           nullptr /* largest */);
     }
     merge_iter_builder.AddPointAndTombstoneIterator(mem_iter,
-                                                    mem_tombstone_iter);  // mem_iter加入
+                                                    mem_tombstone_iter);  // mem_iter加入first_iter
   } else {
     merge_iter_builder.AddIterator(mem_iter);
   }
@@ -1833,7 +1833,7 @@ InternalIterator* DBImpl::NewInternalIterator(
   // Collect all needed child iterators for immutable memtables
   if (s.ok()) {
     super_version->imm->AddIterators(read_options, &merge_iter_builder,
-                                     !read_options.ignore_range_deletions); // imm加入
+                                     !read_options.ignore_range_deletions); // 理论上imm加入，实际上啥都没干
   }
   TEST_SYNC_POINT_CALLBACK("DBImpl::NewInternalIterator:StatusCallback", &s);
   if (s.ok()) {
@@ -3609,11 +3609,11 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
     // WritePreparedTxnDB
     result = NewIteratorImpl(read_options, cfd,
                              (read_options.snapshot != nullptr)
-                                 ? read_options.snapshot->GetSequenceNumber()
+                                 ? read_options.snapshot->GetSequenceNumber() // read的时候没有指定快照，则使用最大序列号
                                  : kMaxSequenceNumber,
                              read_callback);
   }
-  return result;
+  return result;  // result是一个ArenaWrappedDBIter类型的指针
 }
 
 ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
@@ -3693,7 +3693,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
   InternalIterator* internal_iter = NewInternalIterator(
       db_iter->GetReadOptions(), cfd, sv, db_iter->GetArena(), snapshot,
       /* allow_unprepared_value */ true, db_iter);  // internal_iter动态类型是MergingIterator
-  db_iter->SetIterUnderDBIter(internal_iter);
+  db_iter->SetIterUnderDBIter(internal_iter); // db_iter内部有一个DBIter*类型的成员变量db_iter_，DBIter内部又有一个IteratorWrapper类型的成员变量iter_，internal_iter最终赋值给iter_
 
   return db_iter;
 }
