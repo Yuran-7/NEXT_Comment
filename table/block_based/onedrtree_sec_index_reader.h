@@ -22,7 +22,7 @@ class OneDRtreeSecIndexReader : public BlockBasedTable::IndexReaderCommon {
                        FilePrefetchBuffer* prefetch_buffer, InternalIterator* meta_index_iter, 
                        bool use_cache, bool prefetch, bool pin,
                        BlockCacheLookupContext* lookup_context,
-                       std::unique_ptr<IndexReader>* index_reader);
+                       std::unique_ptr<IndexReader>* index_reader); // 静态方法，返回index_reader就是OneDRtreeSecIndexReader对象
 
   // return a two-level iterator: first level is on the partition index
   InternalIteratorBase<IndexValue>* NewIterator(
@@ -53,7 +53,7 @@ class OneDRtreeSecIndexReader : public BlockBasedTable::IndexReaderCommon {
   // For partition blocks pinned in cache. This is expected to be "all or
   // none" so that !partition_map_.empty() can use an iterator expecting
   // all partitions to be saved here.
-  UnorderedMap<uint64_t, CachableEntry<Block>> partition_map_;
+  UnorderedMap<uint64_t, CachableEntry<Block>> partition_map_;  // 意义不明
 //   uint32_t rtree_height_;
 };
 }  // namespace ROCKSDB_NAMESPACE

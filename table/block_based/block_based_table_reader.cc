@@ -2142,11 +2142,11 @@ InternalIterator* BlockBasedTable::NewIterator(
   bool need_upper_bound_check =
       read_options.auto_prefix_mode || PrefixExtractorChanged(prefix_extractor);
   // std::cout << "start creating new index iterator" << std::endl;
-  std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter(NewIndexIterator(
+  std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter(NewIndexIterator(   // 这里的index_iter是OneDRtreeSecIndexIterator类型，因为read_options.is_secondary_index_scan=true，1575行
       read_options,
       /*disable_prefix_seek=*/need_upper_bound_check &&
           rep_->index_type == BlockBasedTableOptions::kHashSearch,
-      /*input_iter=*/nullptr, /*get_context=*/nullptr, &lookup_context)); // OneDRtreeSecIndexIterator类型，因为read_options.is_secondary_index_scan=true
+      /*input_iter=*/nullptr, /*get_context=*/nullptr, &lookup_context));
   // std::cout << "finish creating new index iterator" << std::endl;
   
   if (arena == nullptr) {

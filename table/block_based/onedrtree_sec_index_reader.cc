@@ -190,7 +190,7 @@ InternalIteratorBase<IndexValue>* OneDRtreeSecIndexReader::NewIterator(
     it = new OneDRtreeSecIndexIterator( // class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue>，且OneDRtreeSecIndexIterator类有一个成员变量std::unique_ptr<InternalIteratorBase<IndexValue>> index_iter_;
         table(), ro, *internal_comparator(), std::move(index_iter), // index_iter 赋值给成员变量 index_iter_
         lookup_context ? lookup_context->caller
-                       : TableReaderCaller::kUncategorized, rtree_height_); // 构造函数，每个SST一个，里面里把 read_options.found_sec_blkhandle 拷贝到成员 found_sec_handles_，并把 sec_blk_iter_ 设为 begin()
+                       : TableReaderCaller::kUncategorized, rtree_height_); // 构造函数，定义在table/block_based/onedrtree_sec_index_iterator.h，每个SST一个，里面里把 read_options.found_sec_blkhandle 拷贝到成员 found_sec_handles_，并把 sec_blk_iter_ 设为 begin()
   }
 
   assert(it != nullptr);

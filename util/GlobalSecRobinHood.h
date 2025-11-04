@@ -40,8 +40,17 @@ class GlobalSecRobinHood {
 
   // 插入：O(1) 平均
   void Insert(const Key& k, int filenum, const BlockHandle& handle) {
-    // robin_hood::unordered_map 会自动创建不存在的 key
-    index_[k][filenum].push_back(handle);
+    auto& vec = index_[k][filenum];
+    bool exists = false;
+    for (const auto& h : vec) {
+      if (h.offset() == handle.offset() && h.size() == handle.size()) { // 确保vector<BlockHandle>中不重复插入相同的BlockHandle
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      vec.push_back(handle);
+    }
   }
 
   // 批量插入并删除（优化版）
@@ -100,7 +109,7 @@ class GlobalSecRobinHood {
   }
 
   // 精确查找：O(1) 平均
-  bool Search(const Key& k, std::unordered_multimap<int, BlockHandle>& out_values) const {
+  bool Search(const Key& k, std::unordered_map<int, std::vector<BlockHandle>>& out_values) const {
     auto outer_it = index_.find(k);
     if (outer_it == index_.end()) {
       return false;
@@ -112,7 +121,7 @@ class GlobalSecRobinHood {
       int filenum = kv.first;
       const auto& handles = kv.second;
       for (const auto& handle : handles) {
-        out_values.emplace(filenum, handle);
+        out_values[filenum].emplace_back(handle);
       }
     }
     

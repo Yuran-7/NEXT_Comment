@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <math.h>
 #include <iostream>
+#include <string>
 
 #include "rocksdb/options.h"
 #include "table/format.h"
@@ -102,7 +103,8 @@ namespace rocksdb {
     struct RtreeIteratorContext: public IteratorContext {
         std::string query_mbr;
         std::vector<Slice> sec_index_columns;
-        RtreeIteratorContext(): query_mbr(), sec_index_columns() {};
+        std::string query_point;  // 新增的点查
+        RtreeIteratorContext(): query_mbr(), sec_index_columns(), query_point() {};
     };
 
     struct IntInterval {

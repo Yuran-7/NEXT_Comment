@@ -1844,7 +1844,7 @@ InternalIterator* DBImpl::NewInternalIterator(
                                            allow_unprepared_value); // 此函数被重写，arena可以从merge_iter_builder中获取
     }
     internal_iter = merge_iter_builder.Finish(
-        read_options.ignore_range_deletions ? nullptr : db_iter);
+        read_options.ignore_range_deletions ? nullptr : db_iter); // 这个Finish函数简单return merge_iter
     
     // Wrap with PrefetchedResultsIterator if parallel prefetch is enabled for spatial queries
     if (read_options.parallel_prefetch_all_results &&
@@ -1856,9 +1856,9 @@ InternalIterator* DBImpl::NewInternalIterator(
         this, &mutex_, super_version,
         read_options.background_purge_on_iterator_cleanup ||
             immutable_db_options_.avoid_unnecessary_blocking_io);
-    internal_iter->RegisterCleanup(CleanupSuperVersionHandle, cleanup, nullptr);
+    internal_iter->RegisterCleanup(CleanupSuperVersionHandle, cleanup, nullptr);  // 我们在获取迭代器时对 SuperVersion 加了引用计数；注册清理能确保“无论函数如何返回、外层怎样包装迭代器”，最后都能准确地 Unref
 
-    return internal_iter;
+    return internal_iter; // 返回的就是MergingIterator
   } else {
     CleanupSuperVersion(super_version);
   }
@@ -3622,7 +3622,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
                                             ReadCallback* read_callback,
                                             bool expose_blob_index,
                                             bool allow_refresh) {
-  SuperVersion* sv = cfd->GetReferencedSuperVersion(this);
+  SuperVersion* sv = cfd->GetReferencedSuperVersion(this);  // 加引用计数
 
   TEST_SYNC_POINT("DBImpl::NewIterator:1");
   TEST_SYNC_POINT("DBImpl::NewIterator:2");
@@ -3646,7 +3646,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
   // cache friendly. Here is an example of result:
   // +-------------------------------+
   // |                               |
-  // | ArenaWrappedDBIter            |
+  // | 1. ArenaWrappedDBIter            |
   // |  +                            |
   // |  +---> Inner Iterator   ------------+
   // |  |                            |     |
@@ -3655,12 +3655,12 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
   // |       |                       |     |
   // |          Allocated Memory:    |     |
   // |       |   +-------------------+     |
-  // |       |   | DBIter            | <---+
+  // |       |   | 2. DBIter            | <---+
   // |           |  +                |
   // |       |   |  +-> iter_  ------------+
   // |       |   |                   |     |
   // |       |   +-------------------+     |
-  // |       |   | MergingIterator   | <---+
+  // |       |   | 3. MergingIterator   | <---+
   // |           |  +                |
   // |       |   |  +->child iter1  ------------+
   // |       |   |  |                |          |

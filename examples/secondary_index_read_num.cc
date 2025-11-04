@@ -139,12 +139,13 @@ int main(int argc, char* argv[]) {
     // For per file secondary index in SST file
     block_based_options.create_secondary_index = true;  // builder.cc
     block_based_options.create_sec_index_reader = true; // reader.cc
-    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec;
+    block_based_options.sec_index_type = BlockBasedTableOptions::kOneDRtreeSec; // kOneDRtreeSec，kBtreeSec，kRtreeSec，kHashSec
     
     // For global secondary index in memory
     options.create_global_sec_index = true; // to activate the global sec index
     options.global_sec_index_is_spatial = false;
-    options.global_sec_index_is_hash = true;
+    //options.global_sec_index_is_hash = true;
+    // options.global_sec_index_is_btree = true;
 
     // Set the block cache to 64 MB
     block_based_options.block_cache = rocksdb::NewLRUCache(64 * 1024 * 1024);
@@ -164,52 +165,56 @@ int main(int argc, char* argv[]) {
 
     uint32_t id;
     uint32_t op;
-    double low[2];
 
     rocksdb::ReadOptions read_options;
     rocksdb::RtreeIteratorContext iterator_context; // 定义在util/rtree.h，继承IteratorContext
 
     std::chrono::nanoseconds totalDuration{0};
     int totalResults = 0;
-    for (int i=0; i<querySize;i++) {
-        queryFile >> low[0] >> low[1];
+    for (int i = 0; i < querySize; ) {
+        std::string line;
+        if (!std::getline(queryFile, line)) {
+            break; // no more input
+        }
+        // skip empty or whitespace-only lines
+        if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
 
-        auto start = std::chrono::high_resolution_clock::now();
-        iterator_context.query_mbr = 
-                serialize_query(low[0], low[1]);
+        std::istringstream iss(line);
+        double a, b;
+        if (!(iss >> a)) {
+            continue; // malformed line, skip
+        }
+        bool has_second = static_cast<bool>(iss >> b);
+
+        auto start = std::chrono::high_resolution_clock::now(); // 开始计时
+
+        // Fill iterator context depending on 1 or 2 numbers
+        if (has_second) {
+            iterator_context.query_mbr = serialize_query(a, b);
+            iterator_context.query_point.clear();
+        } else {
+            iterator_context.query_mbr.clear();
+            iterator_context.query_point.assign(reinterpret_cast<const char*>(&a), sizeof(double));
+        }
         iterator_context.sec_index_columns = {"area"};
         read_options.iterator_context = &iterator_context;
         read_options.is_secondary_index_scan = true;
         read_options.is_secondary_index_spatial = false;
         read_options.async_io = true;
-//        read_options.parallel_prefetch_all_results = true;  // Enable parallel prefetch for spatial queries
-        // std::cout << "create newiterator" << std::endl;
-        std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));  // it动态类型是ArenaWrappedDBIter
-        // std::cout << "created New iterator" << std::endl;
+        // read_options.parallel_prefetch_all_results = true;  // Enable parallel prefetch for spatial queries
+
+        std::unique_ptr<rocksdb::Iterator> it(db->NewIterator(read_options));  // it动态类型是ArenaWrappedDBIter
         int counter = 0;
         for (it->SeekToFirst(); it->Valid(); it->Next()) {
-            // // 打印第一个查询的所有key，检查是否大致升序；已知key为4字节int
-            // if (i == 0) {
-            //     const Slice key_slice = it->key();
-            //     if (key_slice.size() >= sizeof(int)) {
-            //         int key_int = *reinterpret_cast<const int*>(key_slice.data());
-            //         std::cout << key_int << "\n";
-            //     } else {
-            //         std::cout << "<invalid key size:" << key_slice.size() << ">\n";
-            //     }
-            // }
-
             double value = deserialize_val(it->value());    // it->value()是返回所有值，deserialize_val将第一个double类型的面积取出来
-            // std::cout << value << std::endl;
-            counter ++;
+            (void)value; // suppress unused warning if value isn't printed
+            counter++;
         }
-        auto end = std::chrono::high_resolution_clock::now(); 
+        auto end = std::chrono::high_resolution_clock::now();   // 结束计时
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         totalDuration = totalDuration + duration;
-        // resFile << "Results: \t" << counter << "\t" << totalDuration.count() << "\n";
-        // std::cout << "search " << i + 1 << " number of results: " << counter << std::endl;
-        // std::cout << "Query Duration: " << duration.count() << " nanoseconds" << std::endl;   
         totalResults += counter;
+        ++i; // count only successful query lines
     }
     std::cout << "Execution time: " << totalDuration.count() / 1'000'000'000.0 << " seconds" << std::endl;
     std::cout << "Total number of results: " << totalResults << std::endl;

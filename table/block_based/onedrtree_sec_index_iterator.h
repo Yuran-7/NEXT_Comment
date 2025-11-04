@@ -53,9 +53,7 @@ class OneDRtreeSecIndexIterator : public InternalIteratorBase<IndexValue> {
       for (const std::pair<uint64_t, u_int64_t>& fsbh: *read_options.found_sec_blkhandle) {
         found_sec_handles_->emplace_back(fsbh);
       }
-      sec_blk_iter_ = found_sec_handles_->begin();
-      // std::cout << "query_mbr_: " << query_mbr_ << std::endl;
-      // std::cout << "rtree_index_iterator rtree_height_: " << rtree_height_ << std::endl;
+      sec_blk_iter_ = found_sec_handles_->begin();  // 感觉这个才是关键的
     }
   }
 

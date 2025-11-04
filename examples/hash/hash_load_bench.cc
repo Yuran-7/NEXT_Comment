@@ -106,10 +106,8 @@ int main(int argc, char** argv) {
   double first_key = sample_keys[0];
   std::cout << "Sample[0] key: " << std::setprecision(17) << first_key << "\n\n";
 
-  // ============================================================
   // 对第一个 key 做一次单次查询
-  // ============================================================
-  std::unordered_multimap<int, BlockHandle> out;
+  std::unordered_map<int, std::vector<BlockHandle>> out;
   auto s0 = Clock::now();
   bool found = index.Search(first_key, out);
   auto s1 = Clock::now();
@@ -118,9 +116,7 @@ int main(int argc, char** argv) {
             << " us, found=" << (found ? "true" : "false")
             << ", results=" << out.size() << "\n";
 
-  // ============================================================
   // 对 sample_n 个不同的 key 逐个搜索，统计总时间和平均时间
-  // ============================================================
   auto m0 = Clock::now();
   for (size_t i = 0; i < sample_n; ++i) {
     out.clear();  // 如果不关心结果，可以保留，但不清也问题不大

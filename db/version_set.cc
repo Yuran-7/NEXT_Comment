@@ -1923,6 +1923,120 @@ void Version::AddIterators(const ReadOptions& read_options,
   }
 }
 // 这个函数是Version类的，不是VersionSet类的
+
+// Helper to convert global secondary index hits into per-file table iterators
+// and add them to merge_iter_builder.
+static void BuildGlobalSecIndexTableIters(
+    const std::vector<GlobalSecIndexValue>& hits,
+    ReadOptions& read_options,
+    const FileOptions& soptions,
+    ColumnFamilyData* cfd,
+    VersionStorageInfo* storage_info,
+    const MutableCFOptions& mutable_cf_options,
+    size_t max_file_size_for_l0_meta_pin,
+    Arena* arena,
+    MergeIteratorBuilder* merge_iter_builder,
+    bool allow_unprepared_value) {
+  TruncatedRangeDelIterator* tombstone_iter = nullptr;
+
+  std::map<uint64_t, std::vector<BlockHandle>> filenum_2_blkhandle; // 这里用的是map，不知道有没有必要改成unordered_map
+  for (const GlobalSecIndexValue& hf : hits) {
+    filenum_2_blkhandle[hf.filenum].emplace_back(hf.blkhandle);
+  }
+
+  std::set<std::pair<uint64_t, u_int64_t>> seenBlkHandle;
+  for (auto mit = filenum_2_blkhandle.begin(); mit != filenum_2_blkhandle.end(); ++mit) {
+    uint64_t hfile_number = mit->first;
+
+    for (const BlockHandle& bh : mit->second) {
+      uint64_t offset_bh = bh.offset();
+      uint64_t size_bh = bh.size();
+      if (seenBlkHandle.find(std::make_pair(offset_bh, size_bh)) != seenBlkHandle.end()) {
+        continue;
+      } else {
+        read_options.found_sec_blkhandle->emplace_back(std::make_pair(offset_bh, size_bh)); // found_sec_blkhandle才是带入去创建table iterator的参数
+        seenBlkHandle.insert(std::make_pair(offset_bh, size_bh));
+      }
+    }
+    seenBlkHandle.clear();
+
+    auto hfile_loc = storage_info->GetFileLocation(hfile_number);
+    if (hfile_loc.GetLevel() == -1) {
+      read_options.found_sec_blkhandle->clear();
+      continue;
+    }
+    const auto& file = storage_info->LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];
+    auto table_iter = cfd->table_cache()->NewIterator(  // 收集到的table_iter是BlockBasedTableIterator
+        read_options, soptions, cfd->internal_sec_comparator(),
+        *file.file_metadata, /*range_del_agg=*/nullptr,
+        mutable_cf_options.prefix_extractor, nullptr,
+        cfd->internal_stats()->GetFileReadHist(0),
+        TableReaderCaller::kUserIterator, arena,
+        /*skip_filters=*/false, /*level=*/0, max_file_size_for_l0_meta_pin,
+        /*smallest_compaction_key=*/nullptr,
+        /*largest_compaction_key=*/nullptr, allow_unprepared_value,
+        &tombstone_iter);
+    if (read_options.ignore_range_deletions) {
+      merge_iter_builder->AddIterator(table_iter);
+    } else {
+      merge_iter_builder->AddPointAndTombstoneIterator(table_iter, tombstone_iter);
+    }
+    read_options.found_sec_blkhandle->clear();
+  }
+}
+
+// Helper to build table iterators directly from hash search results
+// hash_results: key = filenum, value = BlockHandle (data block in that file)
+static void BuildGlobalSecIndexTableItersFromHashResults(
+    const std::unordered_map<int, std::vector<BlockHandle>>& hash_results,
+    ReadOptions& read_options,
+    const FileOptions& soptions,
+    ColumnFamilyData* cfd,
+    VersionStorageInfo* storage_info,
+    const MutableCFOptions& mutable_cf_options,
+    size_t max_file_size_for_l0_meta_pin,
+    Arena* arena,
+    MergeIteratorBuilder* merge_iter_builder,
+    bool allow_unprepared_value) {
+  TruncatedRangeDelIterator* tombstone_iter = nullptr;
+
+  for (auto mit = hash_results.begin(); mit != hash_results.end(); ++mit) {
+    uint64_t hfile_number = mit->first;
+
+    for (const BlockHandle& bh : mit->second) {
+      uint64_t offset_bh = bh.offset();
+      uint64_t size_bh = bh.size();
+      if (read_options.found_sec_blkhandle) {
+        read_options.found_sec_blkhandle->emplace_back(std::make_pair(offset_bh, size_bh));
+      }
+    }
+
+    auto hfile_loc = storage_info->GetFileLocation(hfile_number);
+    if (hfile_loc.GetLevel() == -1) {
+      if (read_options.found_sec_blkhandle) read_options.found_sec_blkhandle->clear();
+      continue;
+    }
+
+    const auto& file = storage_info->LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];
+    auto table_iter = cfd->table_cache()->NewIterator(
+        read_options, soptions, cfd->internal_sec_comparator(),
+        *file.file_metadata, /*range_del_agg=*/nullptr,
+        mutable_cf_options.prefix_extractor, nullptr,
+        cfd->internal_stats()->GetFileReadHist(0),
+        TableReaderCaller::kUserIterator, arena,
+        /*skip_filters=*/false, /*level=*/0, max_file_size_for_l0_meta_pin,
+        /*smallest_compaction_key=*/nullptr,
+        /*largest_compaction_key=*/nullptr, allow_unprepared_value,
+        &tombstone_iter);
+    if (read_options.ignore_range_deletions) {
+      merge_iter_builder->AddIterator(table_iter);
+    } else {
+      merge_iter_builder->AddPointAndTombstoneIterator(table_iter, tombstone_iter);
+    }
+    if (read_options.found_sec_blkhandle) read_options.found_sec_blkhandle->clear();
+  }
+}
+
 void Version::AddIteratorsForLevel(const ReadOptions& read_options,
                                    const FileOptions& soptions,
                                    MergeIteratorBuilder* merge_iter_builder,
@@ -1943,17 +2057,33 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
   // When global secondary index is activated
   // the iterator for level will be created based on the outputs from
   // global secondary index
-  if(mutable_cf_options_.create_global_sec_index) { // 这个if分支是新增的
+  if(mutable_cf_options_.create_global_sec_index) { // 这个if分支是新增的，我感觉这里应该用read_options比较合理
     
     // getting the search range
     RtreeIteratorContext* context =   // 定义在 util/rtree.h，只有一个成员变量std::string query_mbr
         reinterpret_cast<RtreeIteratorContext*>(read_options.iterator_context);
     Slice query_slice(context->query_mbr);
     std::vector<GlobalSecIndexValue> hittedFiles;
-    if (mutable_cf_options_.global_sec_index_is_spatial) {
+    std::unordered_map<int, std::vector<BlockHandle>> hash_results;
+    if (mutable_cf_options_.global_sec_index_is_hash) {
+      // Hash-based search: only supported for point queries
+      if (!context->query_point.empty()) {
+        const double point = *reinterpret_cast<const double*>(context->query_point.data());
+        global_hash_->Search(point, hash_results);
+        BuildGlobalSecIndexTableItersFromHashResults(
+            hash_results, const_cast<ReadOptions&>(read_options), soptions,
+            cfd_, &storage_info_, mutable_cf_options_,
+            max_file_size_for_l0_meta_pin_, arena, merge_iter_builder,
+            allow_unprepared_value);
+      }
+    } else if (mutable_cf_options_.global_sec_index_is_spatial) {
       Mbr query_mbr = ReadSecQueryMbr(query_slice);
       Rect query_rect(query_mbr.first.min, query_mbr.second.min, query_mbr.first.max, query_mbr.second.max);
       hittedFiles = global_rtree_->Search(query_rect.min, query_rect.max, GlobalRTreeCallback);
+      BuildGlobalSecIndexTableIters(hittedFiles, const_cast<ReadOptions&>(read_options), soptions,
+                                    cfd_, &storage_info_, mutable_cf_options_,
+                                    max_file_size_for_l0_meta_pin_, arena, merge_iter_builder,
+                                    allow_unprepared_value);
     } else {
       ValueRange query_valrange = ReadValueRange(query_slice);
       Rect1D query_rect1D(query_valrange.range.min, query_valrange.range.max);
@@ -1962,80 +2092,10 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
       auto end = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
       std::cout << "R-tree search time (microseconds): " << duration << std::endl;
-    }
-
-    // iterating through the return vector
-    // find the level and position of each file and 
-    // create the respective table_iter
-    TruncatedRangeDelIterator* tombstone_iter = nullptr;
-    // int n_hits = static_cast<int>(hittedFiles.size());
-    // std::cout << "return hits: " << n_hits << std::endl;    
-
-    std::map<uint64_t, std::vector<BlockHandle>> filenum_2_blkhandle;
-    std::vector<uint64_t> hitfilenum;
-    for (const GlobalSecIndexValue& hf :hittedFiles){
-      // hitfilenum.emplace_back(hf.filenum);
-      filenum_2_blkhandle[hf.filenum].emplace_back(hf.blkhandle);
-    } // 分好类，每个文件号（SST）对应一个vector<BlockHandle>
-
-    // std::sort(hitfilenum.begin(),hitfilenum.end());
-    // hitfilenum.erase(std::unique(hitfilenum.begin(),hitfilenum.end()),hitfilenum.end());
-    // std::cout << "Found file number: " << static_cast<int>(hitfilenum.size()) << std::endl;
-
-    std::set<std::pair<uint64_t, u_int64_t>> seenBlkHandle; // 这个数据结构用于去重
-
-    for (std::map<uint64_t, std::vector<BlockHandle>>::iterator mit = filenum_2_blkhandle.begin(); mit != filenum_2_blkhandle.end(); ++mit) {
-    // for (int i = 0; i < static_cast<int>(hitfilenum.size()); i++) {
-      // find the file_number of the hitted file
-      // uint64_t hfile_number = hittedFiles[i].second;
-      // uint64_t hfile_number = hitfilenum[i];
-      uint64_t hfile_number = mit->first;
-      // std::cout << hfile_number << std::endl;
-
-      // for (const BlockHandle& bh: filenum_2_blkhandle[hfile_number]) {
-      for (const BlockHandle& bh: mit->second) {
-        uint64_t offset_bh = bh.offset();
-        uint64_t size_bh = bh.size();
-        if (seenBlkHandle.find(std::make_pair(offset_bh, size_bh)) != seenBlkHandle.end()) {
-          continue;
-        } else {
-          read_options.found_sec_blkhandle->emplace_back(std::make_pair(offset_bh, size_bh)); // 把这些结果写入 read_options.found_sec_blkhandle
-          seenBlkHandle.insert(std::make_pair(offset_bh, size_bh));
-        }
-        // read_options.found_sec_blkhandle->emplace_back(std::make_pair(offset_bh, size_bh));
-      }
-      seenBlkHandle.clear();  // 内层for循环结束清空一次
-      // std::cout << "found_sec_blkhandle size: " << read_options.found_sec_blkhandle->size() << std::endl;
-
-     
-      // std::cout << "file number:" << hfile_number << std::endl;
-      // get the file location
-      // file_level: location.GetLevel()
-      // file_position: location.GetPosition()
-      auto hfile_loc = storage_info_.GetFileLocation(hfile_number); // 根据文件编号，获取FileLocation结构，FileLocation内容定义该文件在第几行的第几个位置
-      if (hfile_loc.GetLevel() == -1) {
-        read_options.found_sec_blkhandle->clear();  // 清空vector中的所有内容
-        continue;
-      } 
-      // 它访问的只是“内存里的元数据（来自 MANIFEST 重放/Version 构建时填充），并不意味着对应的 SST 文件已经被“打开”
-      const auto& file = storage_info_.LevelFilesBrief(hfile_loc.GetLevel()).files[hfile_loc.GetPosition()];  // 根据 hfile_loc 的 Level 和在该 Level 中的位置，找到对应的文件简要信息，并用只读引用绑定到 file
-      auto table_iter = cfd_->table_cache()->NewIterator( // cfd_是ColumnFamilyData类型的指针，是Version的成员变量
-          read_options, soptions, cfd_->internal_sec_comparator(),  // 注意这个比较器，read_options记录该文件中若干个handleblock
-          *file.file_metadata, /*range_del_agg=*/nullptr, // file类型是FdWithKeyRange
-          mutable_cf_options_.prefix_extractor, nullptr,
-          cfd_->internal_stats()->GetFileReadHist(0),
-          TableReaderCaller::kUserIterator, arena,
-          /*skip_filters=*/false, /*level=*/0, max_file_size_for_l0_meta_pin_,
-          /*smallest_compaction_key=*/nullptr,
-          /*largest_compaction_key=*/nullptr, allow_unprepared_value,
-          &tombstone_iter); // 为每一个命中的 SST 创建表迭代器
-      if (read_options.ignore_range_deletions) {
-        merge_iter_builder->AddIterator(table_iter);
-      } else {
-        merge_iter_builder->AddPointAndTombstoneIterator(table_iter,
-                                                        tombstone_iter);  // 走这里，table_iter：遍历 point key 的迭代器，tombstone_iter：遍历 range deletion 的迭代器
-        } 
-      read_options.found_sec_blkhandle->clear();  // 创建完一个迭代器就清空，为下一个SST做准备，read_options已经在生成table_iter时使用到了
+      BuildGlobalSecIndexTableIters(hittedFiles, const_cast<ReadOptions&>(read_options), soptions,
+                                    cfd_, &storage_info_, mutable_cf_options_,
+                                    max_file_size_for_l0_meta_pin_, arena, merge_iter_builder,
+                                    allow_unprepared_value);
     }
   } else {  // else分支的内容没有变动
     if (level == 0) {

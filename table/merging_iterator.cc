@@ -161,8 +161,8 @@ class MergingIterator : public InternalIterator { // 迭代器没有在table/mer
   }
 
   virtual void AddIterator(InternalIterator* iter) {
-    children_.emplace_back(children_.size(), iter);
-    if (pinned_iters_mgr_) {
+    children_.emplace_back(children_.size(), iter); // children_ 是一个 vector<HeapItem>，emplace_back自动调用 HeapItem 的构造函数，children_.size()作为level
+    if (pinned_iters_mgr_) {  // false
       iter->SetPinnedItersMgr(pinned_iters_mgr_);
     }
     // Invalidate to ensure `Seek*()` is called to construct the heaps before
@@ -2478,10 +2478,10 @@ void MergeIteratorBuilder::AddPointAndTombstoneIterator(
                              !merge_iter->range_tombstone_iters_.empty() ||
                              tombstone_iter_ptr;
   if (!use_merging_iter && (add_range_tombstone || first_iter)) {
-    use_merging_iter = true;
+    use_merging_iter = true;  // 开始使用 MergingIterator
     if (first_iter) {
       merge_iter->AddIterator(first_iter);
-      first_iter = nullptr;
+      first_iter = nullptr; // 把之前的 first_iter 加入到 merge_iter 中，然后把 first_iter 置为空
     }
   }
   if (use_merging_iter) {

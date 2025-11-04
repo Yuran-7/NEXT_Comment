@@ -224,7 +224,7 @@ Status TableCache::FindTable(
       // or somebody repairs the file, we recover automatically.
     } else {
       s = cache_->Insert(key, table_reader.get(), 1, &DeleteEntry<TableReader>,
-                         handle); // cahce_是LRUCache，插入table_reader
+                         handle); // cahce_是LRUCache，插入table_reader，得到一个handle
       if (s.ok()) {
         // Release ownership of table reader.
         table_reader.release();
@@ -263,7 +263,7 @@ InternalIterator* TableCache::NewIterator(
         prefix_extractor, options.read_tier == kBlockCacheTier /* no_io */,
         !for_compaction /* record_read_stats */, file_read_hist, skip_filters,
         level, true /* prefetch_index_and_filter_in_cache */,
-        max_file_size_for_l0_meta_pin, file_meta.temperature);  // 从缓存中找table_reader，找到直接返回，没找到先创建再加入到缓存
+        max_file_size_for_l0_meta_pin, file_meta.temperature);  // 从缓存中找table_reader，找到直接返回handle，没找到先创建再加入到缓存
     if (s.ok()) {
       table_reader = GetTableReaderFromHandle(handle);
     }
@@ -279,12 +279,12 @@ InternalIterator* TableCache::NewIterator(
           file_options.compaction_readahead_size, allow_unprepared_value);  // result 是 BlockBasedTableIterator，table/block_based/block_based_table_reader.cc 2128
     }
     if (handle != nullptr) {  // 不进入
-      result->RegisterCleanup(&UnrefEntry, cache_, handle);
+      result->RegisterCleanup(&UnrefEntry, cache_, handle); // 如果 table_reader 是从缓存中获取的（有 handle），需要在迭代器的清理回调中注册缓存引用的释放函数，确保迭代器销毁时正确释放缓存引用计数
       handle = nullptr;  // prevent from releasing below
     }
 
     if (for_compaction) { // 不进入
-      table_reader->SetupForCompaction();
+      table_reader->SetupForCompaction(); // 如果这个迭代器是为 Compaction 创建的，调用 SetupForCompaction() 来优化读取行为（例如调整预读策略、I/O hint 等）
     }
     if (table_reader_ptr != nullptr) {  // 不进入
       *table_reader_ptr = table_reader;
